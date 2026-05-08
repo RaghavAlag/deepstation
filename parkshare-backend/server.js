@@ -18,6 +18,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/spots', require('./routes/spots'));
 app.use('/api/bookings', require('./routes/bookings'));
+app.use('/api/ai/pricing', require('./routes/ai-pricing'));
 // app.use('/api/extensions', require('./routes/extensions'));
 // app.use('/api/damage', require('./routes/damage'));
 // app.use('/api/notifications', require('./routes/notifications'));

@@ -89,7 +89,9 @@
       spots: [],
       selectedSpot: null,
       selectedHours: 1,
-      currentBooking: null
+      selectedRate: 0,
+      currentBooking: null,
+      spotMarkerStatus: {}
     };
 
     document.getElementById('driverName').textContent = sessionStorage.getItem('name') || 'Driver';
@@ -142,17 +144,82 @@
     async function renderMarkers(spots) {
       state.markers.forEach((m) => state.map.removeLayer(m));
       state.markers = [];
+      state.spotMarkerStatus = {};
       for (const spot of spots) {
         const color = await getSpotAvailabilityColor(spot.spotId);
+        state.spotMarkerStatus[spot.spotId] = color;
         const marker = L.marker([Number(spot.latitude), Number(spot.longitude)], { icon: markerIcon(color, spot.baseHourlyRate || 0) }).addTo(state.map);
         marker.on('click', () => openSpotSheet(spot));
         state.markers.push(marker);
       }
     }
 
+    function demandBadgeClass(level) {
+      if (level === 'low') return 'status-green';
+      if (level === 'medium') return 'status-amber';
+      if (level === 'high') return 'pill-danger';
+      if (level === 'very_high') return 'status-red';
+      return 'status-amber';
+    }
+
+    function occupancyNearby() {
+      const total = Object.keys(state.spotMarkerStatus).length;
+      if (!total) return 0;
+      const busy = Object.values(state.spotMarkerStatus).filter((c) => c === '#ff4444' || c === '#ffaa00').length;
+      return busy / total;
+    }
+
+    async function fetchAiPriceForSpot(spot) {
+      const now = new Date();
+      const timeOfDay = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+      const hasUpcomingBooking = state.spotMarkerStatus[spot.spotId] === '#ffaa00';
+      const body = {
+        spotId: spot.spotId,
+        baseRate: Number(spot.baseHourlyRate || 0),
+        lat: Number(spot.latitude),
+        lng: Number(spot.longitude),
+        timeOfDay,
+        dayOfWeek,
+        occupancyNearby: occupancyNearby(),
+        hasUpcomingBooking
+      };
+      return json(`${apiBase}/ai/pricing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    function renderAiPricingSection(ai, baseRate) {
+      const aiSection = document.getElementById('ai-price-section');
+      const base = Number(baseRate || 0);
+      if (!aiSection) return;
+      if (!ai) {
+        aiSection.innerHTML = `<div class="muted">AI unavailable - base rate: ₹${base}/hr</div>`;
+        state.selectedRate = base;
+        updateTotal();
+        return;
+      }
+      state.selectedRate = Number(ai.finalPrice) || base;
+      aiSection.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div>
+            <div style="font-size:1.5rem;color:var(--accent);font-weight:700;">₹${state.selectedRate}/hr</div>
+            ${state.selectedRate !== base ? `<div class="muted"><s>₹${base}/hr</s></div>` : ''}
+          </div>
+          <span class="status-chip ${demandBadgeClass(ai.demandLevel)}">${(ai.demandLevel || 'medium').replace('_', ' ').toUpperCase()}</span>
+        </div>
+        <div class="muted" style="font-style:italic;margin-top:6px;">${ai.reasoning || 'AI pricing unavailable - showing base rate'}</div>
+        <div class="muted" style="font-size:.72rem;margin-top:4px;">✨ AI Suggested</div>
+      `;
+      updateTotal();
+    }
+
     function openSpotSheet(spot) {
       state.selectedSpot = spot;
       state.selectedHours = 1;
+      state.selectedRate = Number(spot.baseHourlyRate || 0);
       const distance = haversineDistance(state.userPos.lat, state.userPos.lng, Number(spot.latitude), Number(spot.longitude)).toFixed(1);
       const images = (spot.images || []).length ? spot.images : ['https://via.placeholder.com/320x180?text=No+Image'];
       const features = [
@@ -170,7 +237,11 @@
         <div class="chips">${vehicleTags}</div>
         <p>Distance: ${distance} km</p>
         <p>Available: ${spot.availableFrom || '--:--'} to ${spot.availableTo || '--:--'}</p>
-        <div id="ai-price-section" class="card" style="margin:8px 0;">AI pricing coming in Phase 6. Base rate: ₹${spot.baseHourlyRate || 0}/hr</div>
+        <div id="ai-price-section" class="card" style="margin:8px 0;">
+          <div class="skeleton" style="height:22px;margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:16px;width:65%;"></div>
+          <div class="muted" style="margin-top:8px;">Calculating AI price...</div>
+        </div>
         <div class="duration">
           <button class="btn-secondary dur" data-h="1">1h</button>
           <button class="btn-secondary dur" data-h="2">2h</button>
@@ -197,10 +268,15 @@
       };
       sheet.querySelector('#bookNowBtn').onclick = openBookingModal;
       sheet.querySelector('#closeSheetBtn').onclick = closeSheet;
+      fetchAiPriceForSpot(spot).then((ai) => {
+        renderAiPricingSection(ai, spot.baseHourlyRate || 0);
+      }).catch(() => {
+        renderAiPricingSection(null, spot.baseHourlyRate || 0);
+      });
     }
 
     function updateTotal() {
-      const total = (state.selectedSpot.baseHourlyRate || 0) * state.selectedHours;
+      const total = (state.selectedRate || state.selectedSpot.baseHourlyRate || 0) * state.selectedHours;
       document.getElementById('totalPrice').textContent = `Total: ₹${total}`;
     }
 
@@ -208,12 +284,13 @@
 
     function openBookingModal() {
       const spot = state.selectedSpot;
-      const total = (spot.baseHourlyRate || 0) * state.selectedHours;
+      const pricePerHour = Number(state.selectedRate || spot.baseHourlyRate || 0);
+      const total = pricePerHour * state.selectedHours;
       document.getElementById('bookingSummary').innerHTML = `
         <div><strong>${spot.title}</strong></div>
         <div>${spot.address}</div>
         <div>Duration: ${state.selectedHours}h</div>
-        <div>Rate: ₹${spot.baseHourlyRate}/hr</div>
+        <div>Rate: ₹${pricePerHour}/hr</div>
         <div>Total: ₹${total}</div>
       `;
       document.getElementById('bookingError').textContent = '';
@@ -239,9 +316,9 @@
           startTime: start.toISOString(),
           endTime: end.toISOString(),
           durationHours: state.selectedHours,
-          baseRate: spot.baseHourlyRate || 0,
+          baseRate: Number(state.selectedRate || spot.baseHourlyRate || 0),
           aiSurgeMultiplier: 1.0,
-          totalAmount: (spot.baseHourlyRate || 0) * state.selectedHours,
+          totalAmount: Number(state.selectedRate || spot.baseHourlyRate || 0) * state.selectedHours,
           paymentStatus: 'mock_paid'
         };
         const data = await json(`${apiBase}/bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
