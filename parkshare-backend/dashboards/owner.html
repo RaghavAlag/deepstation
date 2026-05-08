@@ -40,12 +40,13 @@
   <header class="navbar">
     <div class="nav-brand">ParkShare</div>
     <div class="profile">
-      <button class="btn-secondary" title="Notifications">🔔 <span id="notifBadge" class="badge">0</span></button>
+      <button id="notifBellBtn" class="btn-secondary" title="Notifications" style="position:relative;">🔔 <span id="notifBadge" class="badge" style="display:none;background:#ff4444;">0</span></button>
       <span id="ownerName"></span>
       <img id="ownerAvatar" alt="Owner avatar" />
       <button id="signOutBtn" class="btn-danger">Sign Out</button>
     </div>
   </header>
+  <section id="notifDropdown" class="card" style="display:none;position:fixed;top:68px;right:16px;z-index:1200;min-width:320px;max-width:420px;max-height:420px;overflow:auto;"></section>
   <div class="layout">
     <aside class="sidebar">
       <button class="btn-secondary tab-btn" data-tab="active">Active Bookings</button>
@@ -71,6 +72,8 @@
   </nav>
   <div class="toast-wrap" id="toastWrap"></div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script type="module">
     const uid = sessionStorage.getItem('uid');
     const role = sessionStorage.getItem('role');
@@ -79,9 +82,19 @@
     }
 
     const apiBase = 'http://localhost:3001/api';
+    const firebaseConfig = {
+      apiKey: "AIzaSyCz-vuMJ30m_Zuk_Rcyxp6Q3DF0olJfkAo",
+      authDomain: "deepstation-b4c26.firebaseapp.com",
+      projectId: "deepstation-b4c26",
+      storageBucket: "deepstation-b4c26.appspot.com",
+      messagingSenderId: "997619029787",
+      appId: "1:997619029787:web:6e6ce7235be6179b5125be"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
     const ownerName = sessionStorage.getItem('name') || 'Owner';
     const ownerPhoto = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
-    const state = { currentTab: 'active', activeBookings: [], editingSpotId: null, uploadedImages: [] };
+    const state = { currentTab: 'active', activeBookings: [], editingSpotId: null, uploadedImages: [], notifications: [], seenNotifIds: new Set() };
 
     document.getElementById('ownerName').textContent = ownerName;
     document.getElementById('ownerAvatar').src = ownerPhoto;
@@ -89,14 +102,40 @@
       sessionStorage.clear();
       window.location.href = './login.html';
     });
+    document.getElementById('notifBellBtn').addEventListener('click', (event) => {
+      event.stopPropagation();
+      const panel = document.getElementById('notifDropdown');
+      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+      if (panel.style.display === 'block') renderNotifDropdown();
+    });
+    document.addEventListener('click', (event) => {
+      const panel = document.getElementById('notifDropdown');
+      const bell = document.getElementById('notifBellBtn');
+      if (!panel.contains(event.target) && !bell.contains(event.target)) {
+        panel.style.display = 'none';
+      }
+    });
 
-    function showToast(message) {
-      const wrap = document.getElementById('toastWrap');
+    function showToast(message, type = 'info') {
+      const colors = { success: '#00ff88', warning: '#ffaa00', danger: '#ff4444', info: '#00d4ff' };
+      const stack = document.querySelectorAll('.custom-toast').length;
       const el = document.createElement('div');
-      el.className = 'toast';
+      el.className = 'custom-toast';
       el.textContent = message;
-      wrap.appendChild(el);
-      setTimeout(() => el.remove(), 3000);
+      el.style.position = 'fixed';
+      el.style.right = '24px';
+      el.style.bottom = `${24 + stack * 60}px`;
+      el.style.background = colors[type] || colors.info;
+      el.style.color = '#0a0a0a';
+      el.style.borderRadius = '10px';
+      el.style.fontWeight = '700';
+      el.style.padding = '10px 14px';
+      el.style.zIndex = '1300';
+      el.style.transform = 'translateX(120%)';
+      el.style.transition = 'transform 180ms ease';
+      document.body.appendChild(el);
+      requestAnimationFrame(() => { el.style.transform = 'translateX(0)'; });
+      setTimeout(() => el.remove(), 4000);
     }
 
     async function fetchJSON(url, options = {}) {
@@ -112,6 +151,100 @@
         throw new Error(detail || 'Request failed');
       }
       return res.json();
+    }
+
+    function relativeTime(input) {
+      const ms = Date.now() - new Date(input || Date.now()).getTime();
+      const mins = Math.floor(ms / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+      const days = Math.floor(hrs / 24);
+      return `${days} day${days === 1 ? '' : 's'} ago`;
+    }
+
+    function updateNotifBadge() {
+      const unread = state.notifications.filter((n) => !n.read).length;
+      const badge = document.getElementById('notifBadge');
+      if (unread > 0) {
+        badge.style.display = 'inline-flex';
+        badge.textContent = unread > 99 ? '99+' : String(unread);
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    async function markNotifRead(notifId) {
+      await fetch(`${apiBase}/notifications/${uid}/${notifId}`, { method: 'PATCH' });
+    }
+
+    async function markAllRead() {
+      const unread = state.notifications.filter((n) => !n.read);
+      await Promise.all(unread.map((n) => markNotifRead(n.id)));
+    }
+
+    function renderNotifDropdown() {
+      const panel = document.getElementById('notifDropdown');
+      const list = state.notifications.slice(0, 20);
+      if (!list.length) {
+        panel.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">You\'re all caught up 🎉</div>';
+        return;
+      }
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong>Notifications</strong>
+          <button id="markAllReadBtn" class="btn-secondary">Mark all as read</button>
+        </div>
+        ${list.map((n) => `
+          <article class="card notif-row" data-id="${n.id}" style="${n.read ? '' : 'border-left:4px solid #00d4ff;background:rgba(0,212,255,0.06);'} margin-bottom:6px;cursor:pointer;">
+            <div>${n.message || ''}</div>
+            <div class="muted" style="font-size:.8rem;margin-top:4px;">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
+          </article>
+        `).join('')}
+      `;
+      const markAllBtn = document.getElementById('markAllReadBtn');
+      if (markAllBtn) {
+        markAllBtn.onclick = async () => {
+          await markAllRead();
+          state.notifications = state.notifications.map((n) => ({ ...n, read: true }));
+          updateNotifBadge();
+          renderNotifDropdown();
+        };
+      }
+      panel.querySelectorAll('.notif-row').forEach((row) => {
+        row.onclick = async () => {
+          const id = row.dataset.id;
+          await markNotifRead(id);
+          state.notifications = state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+          updateNotifBadge();
+          renderNotifDropdown();
+        };
+      });
+    }
+
+    function setupNotificationListener() {
+      firestore
+        .collection('notifications')
+        .doc(uid)
+        .collection('items')
+        .orderBy('createdAt', 'desc')
+        .onSnapshot((snapshot) => {
+          state.notifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          updateNotifBadge();
+          renderNotifDropdown();
+          snapshot.docChanges().forEach((change) => {
+            if (change.type !== 'added') return;
+            const data = change.doc.data();
+            if (state.seenNotifIds.has(change.doc.id)) return;
+            state.seenNotifIds.add(change.doc.id);
+            if (data.type === 'overstaying') showToast(`⚠️ ${data.message}`, 'warning');
+            if (data.type === 'tow_alert') showToast(`🚨 ${data.message}`, 'danger');
+            if (data.type === 'booking_confirmed') showToast(data.message, 'success');
+            if (data.type === 'extension_approved') showToast(data.message, 'success');
+            if (data.type === 'damage_claim') showToast(data.message, 'warning');
+          });
+        });
     }
 
     function setTab(tab) {
@@ -177,8 +310,8 @@
 
     function damageMarkup(b) {
       const r = b.damageReport || {};
-      const areas = Array.isArray(r.areas) ? r.areas : [];
-      const conf = Number(r.confidence || 0);
+      const areas = Array.isArray(r.suspectedDamageAreas) ? r.suspectedDamageAreas : [];
+      const conf = Number(r.confidenceScore || 0);
       return `
         <div class="damage-section">
           <div class="chips">${areas.map((a) => `<span class="chip">${a}</span>`).join('')}</div>
@@ -186,7 +319,7 @@
           <div class="progress" style="margin:8px 0;"><span style="width:${conf}%;"></span></div>
           <div>Estimated repair: ₹${r.estimatedRepairCost || 0}</div>
           <div><span class="badge">${r.recommendation || 'Investigate'}</span></div>
-          <p class="muted">${r.remarks || 'No remarks available.'}</p>
+          <p class="muted">${r.aiRemarks || 'No remarks available.'}</p>
           <button class="btn-primary claim-btn" data-id="${b.bookingId}" data-decision="accepted">Accept Claim</button>
           <button class="btn-danger claim-btn" data-id="${b.bookingId}" data-decision="rejected">Reject Claim</button>
         </div>`;
@@ -212,7 +345,8 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ damageClaimStatus: 'resolved', ownerDecision: btn.dataset.decision })
           });
-          showToast('Damage claim updated.');
+          showToast(btn.dataset.decision === 'accepted' ? 'Claim accepted. Compensation arranged.' : 'Claim rejected.');
+          loadHistory();
         } catch {
           showToast('Could not update damage claim.');
         }
@@ -432,6 +566,8 @@
     }
 
     setInterval(() => { if (state.currentTab === 'active') loadActive(); }, 30000);
+    setInterval(() => { if (state.currentTab === 'history') loadHistory(); }, 15000);
+    setupNotificationListener();
     loadTab('active');
   </script>
 </body>

@@ -14,13 +14,13 @@ async function checkOverstays() {
     await updateBooking(booking.bookingId, { status: 'overstaying' });
     await createNotification(
       booking.driverId,
-      'overstaying_alert',
+      'overstaying',
       `⚠️ You are overstaying at ${booking.spotTitle}! Penalties are accruing.`,
       { bookingId: booking.bookingId }
     );
     await createNotification(
       booking.ownerId,
-      'overstaying_owner_alert',
+      'overstaying',
       `Driver ${booking.driverName} is overstaying at ${booking.spotTitle}.`,
       { bookingId: booking.bookingId }
     );
@@ -28,14 +28,14 @@ async function checkOverstays() {
     if (nowMs - endMs > 10 * 60 * 1000) {
       await createNotification(
         booking.driverId,
-        'tow_alert_driver',
+        'tow_alert',
         `🚨 Tow Alert — Your vehicle at ${booking.spotTitle} has been flagged for removal. Return immediately.`,
         { bookingId: booking.bookingId }
       );
       await createNotification(
         booking.ownerId,
-        'tow_alert_owner',
-        `🚨 Tow Alert — Vehicle at ${booking.spotTitle} flagged for removal. Authorities notified.`,
+        'tow_alert',
+        `🚨 Tow Alert — Vehicle at ${booking.spotTitle} flagged for removal.`,
         { bookingId: booking.bookingId }
       );
     }

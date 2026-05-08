@@ -90,6 +90,12 @@ router.post('/request', async (req, res) => {
       proposedNewEndTime: newEndIso,
       status: 'pending'
     });
+    await createNotification(
+      conflictBooking.driverId,
+      'extension_conflict',
+      `A driver wants to extend their stay. Compensation offered: ₹${ai.compensationAmount}`,
+      { conflictId, bookingId: conflictBooking.bookingId }
+    );
 
     return res.json({
       approved: false,
@@ -133,7 +139,7 @@ router.post('/resolve', async (req, res) => {
       );
       await createNotification(
         conflict.nextDriverId,
-        'booking_delay',
+        'extension_conflict',
         `Your booking start may be delayed. Compensation of ₹${conflict.compensationOffer} is being arranged.`,
         { conflictId }
       );

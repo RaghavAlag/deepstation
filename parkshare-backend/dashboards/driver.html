@@ -51,12 +51,13 @@
     <div class="nav-brand">ParkShare</div>
     <div class="profile">
       <button id="historyBtn" class="btn-secondary">History</button>
-      <button class="btn-secondary" title="Notifications">🔔 <span class="badge" style="background:#ff4444;">0</span></button>
+      <button id="notifBellBtn" class="btn-secondary" title="Notifications" style="position:relative;">🔔 <span id="notifBadge" class="badge" style="background:#ff4444;display:none;">0</span></button>
       <span id="driverName"></span>
       <img id="driverPhoto" alt="Driver photo" />
       <button id="signOutBtn" class="btn-danger">Sign Out</button>
     </div>
   </header>
+  <section id="notifDropdown" class="card" style="display:none;position:fixed;top:68px;right:16px;z-index:1200;min-width:320px;max-width:420px;max-height:420px;overflow:auto;"></section>
 
   <div id="map"></div>
   <div class="floating-search">
@@ -84,14 +85,50 @@
       <button id="closeExtensionBtn" class="btn-secondary" style="margin-top:8px;width:100%;">Close</button>
     </div>
   </div>
+  <div id="videoModalWrap" class="overlay">
+    <div class="modal">
+      <h3 id="videoModalTitle">Record Video</h3>
+      <p id="videoModalSubtext" class="muted" style="margin:6px 0 10px;"></p>
+      <video id="capturePreview" autoplay muted playsinline style="width:100%;border:1px solid var(--border);border-radius:12px;background:#000;"></video>
+      <div id="recBadge" style="display:none;color:#ff4444;font-weight:700;margin-top:8px;">● REC</div>
+      <div class="progress" style="margin-top:8px;"><span id="videoUploadFill" style="width:0%;"></span></div>
+      <button id="videoPrimaryBtn" class="btn-primary" style="width:100%;margin-top:8px;">Start Camera</button>
+      <button id="videoSkipBtn" class="btn-secondary" style="width:100%;margin-top:8px;">Skip (Demo)</button>
+      <p id="videoStatusText" class="muted" style="margin-top:8px;"></p>
+    </div>
+  </div>
+  <div id="damagePromptWrap" class="overlay">
+    <div class="modal">
+      <h3>Did you notice any new damage to your vehicle?</h3>
+      <button id="damageYesBtn" class="btn-danger" style="width:100%;margin-top:10px;">Yes, I noticed damage 🔴</button>
+      <button id="damageNoBtn" class="btn-primary" style="width:100%;margin-top:8px;">No damage, all good ✅</button>
+    </div>
+  </div>
+  <div id="damageClaimWrap" class="overlay">
+    <div class="modal">
+      <div id="damageClaimContent"></div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script>
     const uid = sessionStorage.getItem('uid');
     const role = sessionStorage.getItem('role');
     if (!uid || role !== 'driver') window.location.replace('./login.html');
 
     const apiBase = 'http://localhost:3001/api';
+    const firebaseConfig = {
+      apiKey: "AIzaSyCz-vuMJ30m_Zuk_Rcyxp6Q3DF0olJfkAo",
+      authDomain: "deepstation-b4c26.firebaseapp.com",
+      projectId: "deepstation-b4c26",
+      storageBucket: "deepstation-b4c26.appspot.com",
+      messagingSenderId: "997619029787",
+      appId: "1:997619029787:web:6e6ce7235be6179b5125be"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
     const state = {
       map: null,
       userPos: { lat: 18.9667, lng: 72.8333 },
@@ -102,13 +139,36 @@
       selectedRate: 0,
       currentBooking: null,
       spotMarkerStatus: {},
-      overstayDetectedAt: null
+      overstayDetectedAt: null,
+      entryVideoURL: null,
+      exitVideoURL: null,
+      lastBookingId: null,
+      awaitingDamagePrompt: false,
+      notifications: [],
+      seenNotifIds: new Set()
     };
+    let captureStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let captureMode = 'entry';
 
     document.getElementById('driverName').textContent = sessionStorage.getItem('name') || 'Driver';
     document.getElementById('driverPhoto').src = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
     document.getElementById('signOutBtn').onclick = () => { sessionStorage.clear(); window.location.href = './login.html'; };
     document.getElementById('closeExtensionBtn').onclick = () => document.getElementById('extensionModalWrap').classList.remove('show');
+    document.getElementById('notifBellBtn').onclick = (e) => {
+      e.stopPropagation();
+      const panel = document.getElementById('notifDropdown');
+      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+      if (panel.style.display === 'block') renderNotifDropdown();
+    };
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('notifDropdown');
+      const bell = document.getElementById('notifBellBtn');
+      if (!panel.contains(e.target) && !bell.contains(e.target)) {
+        panel.style.display = 'none';
+      }
+    });
 
     const haversineDistance = (lat1, lng1, lat2, lng2) => {
       const R = 6371;
@@ -123,6 +183,328 @@
       if (!res.ok) throw new Error((await res.text()) || 'Request failed');
       return res.json();
     };
+
+    function relativeTime(input) {
+      const ms = Date.now() - new Date(input || Date.now()).getTime();
+      const mins = Math.floor(ms / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+      const days = Math.floor(hrs / 24);
+      return `${days} day${days === 1 ? '' : 's'} ago`;
+    }
+
+    function showToast(message, type = 'info') {
+      const colors = { success: '#00ff88', warning: '#ffaa00', danger: '#ff4444', info: '#00d4ff' };
+      const stack = document.querySelectorAll('.custom-toast').length;
+      const toast = document.createElement('div');
+      toast.className = 'custom-toast';
+      toast.textContent = message;
+      toast.style.position = 'fixed';
+      toast.style.right = '24px';
+      toast.style.bottom = `${24 + stack * 60}px`;
+      toast.style.background = colors[type] || colors.info;
+      toast.style.color = '#0a0a0a';
+      toast.style.padding = '10px 14px';
+      toast.style.borderRadius = '10px';
+      toast.style.fontWeight = '700';
+      toast.style.zIndex = '1300';
+      toast.style.transform = 'translateX(120%)';
+      toast.style.transition = 'transform 180ms ease';
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => { toast.style.transform = 'translateX(0)'; });
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function updateNotifBadge() {
+      const unread = state.notifications.filter((n) => !n.read).length;
+      const badge = document.getElementById('notifBadge');
+      if (unread > 0) {
+        badge.style.display = 'inline-flex';
+        badge.textContent = unread > 99 ? '99+' : String(unread);
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    async function markNotifRead(notifId) {
+      await fetch(`${apiBase}/notifications/${uid}/${notifId}`, { method: 'PATCH' });
+    }
+
+    async function markAllRead() {
+      const unread = state.notifications.filter((n) => !n.read);
+      await Promise.all(unread.map((n) => markNotifRead(n.id)));
+    }
+
+    function showTowBannerNotification(message) {
+      const banner = document.getElementById('towBanner');
+      const ownerName = state.currentBooking?.ownerName || state.selectedSpot?.ownerName || 'the spot owner';
+      banner.innerHTML = `🚨 TOW ALERT — ${message} <button id="towCallOwnerBtn" class="btn-secondary" style="margin-left:10px;">Call Owner</button>`;
+      banner.classList.add('show');
+      const callBtn = document.getElementById('towCallOwnerBtn');
+      if (callBtn) {
+        callBtn.onclick = () => alert(`Owner: ${ownerName}\nPlease contact the spot owner immediately.`);
+      }
+    }
+
+    function renderNotifDropdown() {
+      const panel = document.getElementById('notifDropdown');
+      const list = state.notifications.slice(0, 20);
+      if (!list.length) {
+        panel.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">You\'re all caught up 🎉</div>';
+        return;
+      }
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <strong>Notifications</strong>
+          <button id="markAllReadBtn" class="btn-secondary">Mark all as read</button>
+        </div>
+        ${list.map((n) => `
+          <article class="card notif-row" data-id="${n.id}" style="${n.read ? '' : 'border-left:4px solid #00d4ff;background:rgba(0,212,255,0.06);'} margin-bottom:6px;cursor:pointer;">
+            <div>${n.message || ''}</div>
+            <div class="muted" style="font-size:.8rem;margin-top:4px;">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
+          </article>
+        `).join('')}
+      `;
+      const markAllBtn = document.getElementById('markAllReadBtn');
+      if (markAllBtn) {
+        markAllBtn.onclick = async () => {
+          await markAllRead();
+          state.notifications = state.notifications.map((n) => ({ ...n, read: true }));
+          updateNotifBadge();
+          renderNotifDropdown();
+        };
+      }
+      panel.querySelectorAll('.notif-row').forEach((row) => {
+        row.onclick = async () => {
+          const id = row.dataset.id;
+          await markNotifRead(id);
+          state.notifications = state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
+          updateNotifBadge();
+          renderNotifDropdown();
+        };
+      });
+    }
+
+    function setupNotificationListener() {
+      firestore
+        .collection('notifications')
+        .doc(uid)
+        .collection('items')
+        .orderBy('createdAt', 'desc')
+        .onSnapshot((snapshot) => {
+          state.notifications = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          updateNotifBadge();
+          renderNotifDropdown();
+          snapshot.docChanges().forEach((change) => {
+            if (change.type !== 'added') return;
+            const data = change.doc.data();
+            if (state.seenNotifIds.has(change.doc.id)) return;
+            state.seenNotifIds.add(change.doc.id);
+            if (data.type === 'overstaying') showToast(`⚠️ ${data.message}`, 'warning');
+            if (data.type === 'tow_alert') {
+              showToast(`🚨 ${data.message}`, 'danger');
+              showTowBannerNotification(data.message);
+            }
+            if (data.type === 'booking_confirmed') showToast(data.message, 'success');
+            if (data.type === 'extension_approved') showToast(data.message, 'success');
+            if (data.type === 'damage_claim') showToast(data.message, 'warning');
+          });
+        });
+    }
+
+    function stopCaptureStream() {
+      if (captureStream) {
+        captureStream.getTracks().forEach((t) => t.stop());
+        captureStream = null;
+      }
+    }
+
+    async function uploadVideoBlob(blob, bookingId, mode) {
+      const fill = document.getElementById('videoUploadFill');
+      fill.style.width = '15%';
+      const formData = new FormData();
+      formData.append('bookingId', bookingId);
+      formData.append('mode', mode);
+      formData.append('video', blob, `${mode}.webm`);
+      const response = await fetch(`${apiBase}/damage/upload-video`, {
+        method: 'POST',
+        body: formData
+      });
+      fill.style.width = '80%';
+      if (!response.ok) {
+        throw new Error('Video upload failed');
+      }
+      const payload = await response.json();
+      fill.style.width = '100%';
+      return payload.videoURL;
+    }
+
+    function openVideoModal(mode) {
+      captureMode = mode;
+      const wrap = document.getElementById('videoModalWrap');
+      const title = document.getElementById('videoModalTitle');
+      const sub = document.getElementById('videoModalSubtext');
+      const primary = document.getElementById('videoPrimaryBtn');
+      const skip = document.getElementById('videoSkipBtn');
+      const status = document.getElementById('videoStatusText');
+      const preview = document.getElementById('capturePreview');
+      const recBadge = document.getElementById('recBadge');
+      const fill = document.getElementById('videoUploadFill');
+      fill.style.width = '0%';
+      status.textContent = '';
+      recBadge.style.display = 'none';
+      title.textContent = mode === 'entry' ? 'Record Entry Walk-Around Video' : 'Record Exit Walk-Around Video';
+      sub.textContent = mode === 'entry'
+        ? 'Please record a short 360° walk-around of your vehicle before parking. This protects you in case of any damage claims.'
+        : 'Please record a short 360° walk-around of your vehicle before leaving the parking spot.';
+      primary.textContent = 'Start Camera';
+      primary.disabled = false;
+      wrap.classList.add('show');
+
+      primary.onclick = async () => {
+        try {
+          if (!captureStream) {
+            captureStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+            preview.srcObject = captureStream;
+            primary.textContent = 'Start Recording';
+            return;
+          }
+          if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(captureStream);
+            mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+            mediaRecorder.onstop = async () => {
+              try {
+                status.textContent = 'Uploading video...';
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                const bookingId = state.currentBooking?.bookingId || state.lastBookingId;
+                const url = await uploadVideoBlob(blob, bookingId, mode);
+                if (mode === 'entry') state.entryVideoURL = url;
+                if (mode === 'exit') state.exitVideoURL = url;
+                await json(`${apiBase}/bookings/${bookingId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(mode === 'entry' ? { entryVideoURL: url } : { exitVideoURL: url })
+                });
+                status.textContent = `${mode === 'entry' ? 'Entry' : 'Exit'} video saved ✅`;
+                stopCaptureStream();
+                wrap.classList.remove('show');
+                if (mode === 'exit') openDamagePrompt();
+              } catch (error) {
+                status.textContent = 'Upload failed. You can use Skip (Demo).';
+                if (mode === 'exit') {
+                  stopCaptureStream();
+                  wrap.classList.remove('show');
+                  showToast('Exit video upload failed. Continuing to damage check.');
+                  openDamagePrompt();
+                }
+              }
+            };
+            mediaRecorder.start();
+            recBadge.style.display = 'block';
+            primary.textContent = 'Stop & Upload';
+            return;
+          }
+          if (mediaRecorder.state === 'recording') {
+            recBadge.style.display = 'none';
+            primary.disabled = true;
+            mediaRecorder.stop();
+          }
+        } catch (error) {
+          status.textContent = 'Camera access failed. You can use Skip (Demo).';
+        }
+      };
+
+      skip.onclick = () => {
+        stopCaptureStream();
+        wrap.classList.remove('show');
+        if (mode === 'entry') {
+          showToast('Entry video skipped (Demo).');
+        } else {
+          openDamagePrompt();
+        }
+      };
+    }
+
+    function openDamagePrompt() {
+      const wrap = document.getElementById('damagePromptWrap');
+      if (wrap.classList.contains('show')) return;
+      wrap.classList.add('show');
+      document.getElementById('damageNoBtn').onclick = () => {
+        wrap.classList.remove('show');
+        state.awaitingDamagePrompt = false;
+        showToast('Booking ended. Thanks for using ParkShare!');
+      };
+      document.getElementById('damageYesBtn').onclick = () => {
+        wrap.classList.remove('show');
+        openDamageClaimForm();
+      };
+    }
+
+    function openDamageClaimForm() {
+      const wrap = document.getElementById('damageClaimWrap');
+      const content = document.getElementById('damageClaimContent');
+      content.innerHTML = `
+        <h2 style="font-family:var(--font-head);">Report Damage</h2>
+        <textarea id="damageNote" placeholder="Describe what you noticed — e.g. scratch on rear bumper, dent on left door, cracked mirror..." style="width:100%;min-height:120px;margin-top:10px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;"></textarea>
+        <div id="damageCount" class="muted" style="margin-top:6px;">0 characters</div>
+        <button id="submitDamageBtn" class="btn-primary" style="width:100%;margin-top:10px;">Submit Claim</button>
+        <button id="closeDamageBtn" class="btn-secondary" style="width:100%;margin-top:8px;">Close</button>
+      `;
+      wrap.classList.add('show');
+      const note = document.getElementById('damageNote');
+      note.oninput = () => { document.getElementById('damageCount').textContent = `${note.value.length} characters`; };
+      document.getElementById('closeDamageBtn').onclick = () => wrap.classList.remove('show');
+      document.getElementById('submitDamageBtn').onclick = async () => {
+        const btn = document.getElementById('submitDamageBtn');
+        const noteText = note.value.trim();
+        if (noteText.length < 5) {
+          showToast('Please add a short damage description before submitting.');
+          return;
+        }
+        btn.disabled = true;
+        btn.innerHTML = 'Analyzing with AI...';
+        try {
+          const bookingId = state.currentBooking?.bookingId || state.lastBookingId;
+          if (!bookingId) {
+            throw new Error('Missing booking reference. Please reopen active booking and try again.');
+          }
+          const report = await json(`${apiBase}/damage/claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bookingId,
+              driverNote: noteText,
+              entryVideoURL: state.entryVideoURL,
+              exitVideoURL: state.exitVideoURL
+            })
+          });
+          content.innerHTML = `
+            <h2 style="font-family:var(--font-head);">✨ AI Damage Analysis Report</h2>
+            <div style="margin-top:8px;">Damage Detected: <span class="status-chip ${report.damageDetected ? 'status-red' : 'status-green'}">${report.damageDetected ? 'Yes' : 'No'}</span></div>
+            <div style="margin-top:8px;">AI Confidence</div>
+            <div class="progress"><span style="width:${report.confidenceScore || 0}%;"></span></div>
+            <div class="chips" style="margin-top:8px;">${(report.suspectedDamageAreas || []).map((a) => `<span class='chip'>${a}</span>`).join('')}</div>
+            <div style="margin-top:8px;">Severity: <span class="status-chip ${report.severity === 'severe' ? 'status-red' : report.severity === 'moderate' ? 'pill-danger' : report.severity === 'minor' ? 'status-amber' : ''}">${report.severity}</span></div>
+            <div style="margin-top:8px;color:var(--gold);font-size:1.4rem;">₹${report.estimatedRepairCost || 0}</div>
+            <div style="margin-top:8px;">Recommendation: <span class="status-chip ${report.recommendation === 'compensate' ? 'status-green' : report.recommendation === 'investigate' ? 'status-amber' : ''}">${report.recommendation}</span></div>
+            <p class="muted" style="font-style:italic;margin-top:8px;">${report.aiRemarks || ''}</p>
+            <button id="doneDamageBtn" class="btn-primary" style="width:100%;margin-top:8px;">Done</button>
+          `;
+          document.getElementById('doneDamageBtn').onclick = () => {
+            state.awaitingDamagePrompt = false;
+            wrap.classList.remove('show');
+            showToast('Damage claim submitted. Owner has been notified.');
+          };
+        } catch (error) {
+          btn.disabled = false;
+          btn.textContent = 'Submit Claim';
+          showToast(`Could not submit claim: ${error.message || 'unknown error'}`);
+        }
+      };
+    }
 
     function initMap() {
       state.map = L.map('map').setView([state.userPos.lat, state.userPos.lng], 13);
@@ -259,7 +641,12 @@
           <button class="btn-secondary dur" data-h="2">2h</button>
           <button class="btn-secondary dur" data-h="3">3h</button>
           <button class="btn-secondary" id="customBtn">Custom</button>
-          <input id="customHours" type="number" min="1" value="1" style="display:none;width:90px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
+          <div id="customDurationWrap" style="display:none;gap:8px;align-items:center;">
+            <input id="customHours" type="number" min="0" value="0" style="width:80px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
+            <span class="muted">h</span>
+            <input id="customMinutes" type="number" min="0" max="59" value="30" style="width:80px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
+            <span class="muted">m</span>
+          </div>
         </div>
         <p id="totalPrice">Total: ₹${(spot.baseHourlyRate || 0) * state.selectedHours}</p>
         <button id="bookNowBtn" class="btn-primary" style="width:100%;">Book Now</button>
@@ -271,11 +658,22 @@
         updateTotal();
       });
       sheet.querySelector('#customBtn').onclick = () => {
-        const input = sheet.querySelector('#customHours');
-        input.style.display = input.style.display === 'none' ? 'block' : 'none';
+        const wrap = sheet.querySelector('#customDurationWrap');
+        wrap.style.display = wrap.style.display === 'none' ? 'flex' : 'none';
       };
       sheet.querySelector('#customHours').oninput = (e) => {
-        state.selectedHours = Math.max(1, Number(e.target.value || 1));
+        const h = Math.max(0, Number(e.target.value || 0));
+        const mInput = sheet.querySelector('#customMinutes');
+        const m = Math.min(59, Math.max(0, Number(mInput.value || 0)));
+        state.selectedHours = Math.max(1 / 60, h + m / 60);
+        updateTotal();
+      };
+      sheet.querySelector('#customMinutes').oninput = (e) => {
+        const m = Math.min(59, Math.max(0, Number(e.target.value || 0)));
+        e.target.value = String(m);
+        const hInput = sheet.querySelector('#customHours');
+        const h = Math.max(0, Number(hInput.value || 0));
+        state.selectedHours = Math.max(1 / 60, h + m / 60);
         updateTotal();
       };
       sheet.querySelector('#bookNowBtn').onclick = openBookingModal;
@@ -335,9 +733,13 @@
         };
         const data = await json(`${apiBase}/bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         state.currentBooking = data.booking;
+        state.lastBookingId = data.booking.bookingId;
+        state.entryVideoURL = data.booking.entryVideoURL || null;
+        state.exitVideoURL = data.booking.exitVideoURL || null;
         document.getElementById('bookingModalWrap').classList.remove('show');
         closeSheet();
         showActiveBookingBar();
+        openVideoModal('entry');
       } catch (error) {
         const msg = String(error?.message || '');
         if (msg.includes('already booked')) {
@@ -460,18 +862,6 @@
       modal.classList.add('show');
     }
 
-    function showToast(message) {
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.textContent = message;
-      document.body.appendChild(toast);
-      toast.style.position = 'fixed';
-      toast.style.right = '12px';
-      toast.style.bottom = '12px';
-      toast.style.zIndex = '1200';
-      setTimeout(() => toast.remove(), 3000);
-    }
-
     function showActiveBookingBar() {
       const bar = document.getElementById('activeBookingBar');
       if (!state.currentBooking) return;
@@ -514,7 +904,20 @@
       document.getElementById('endBtn').onclick = async () => {
         await json(`${apiBase}/bookings/${b.bookingId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) });
         bar.classList.remove('show');
-        state.currentBooking = null;
+        state.lastBookingId = b.bookingId;
+        state.awaitingDamagePrompt = true;
+        openVideoModal('exit');
+        state.currentBooking = { ...b, status: 'completed' };
+        setTimeout(() => {
+          if (state.awaitingDamagePrompt && !document.getElementById('videoModalWrap').classList.contains('show') && !document.getElementById('damagePromptWrap').classList.contains('show')) {
+            openDamagePrompt();
+          }
+        }, 1200);
+        setTimeout(() => {
+          if (state.awaitingDamagePrompt && !document.getElementById('damagePromptWrap').classList.contains('show')) {
+            openDamagePrompt();
+          }
+        }, 9000);
       };
       if (isOverstaying && graceRemaining <= 0) {
         document.getElementById('towBanner').classList.add('show');
@@ -528,7 +931,7 @@
       const result = await json(`${apiBase}/bookings/${state.currentBooking.bookingId}`).catch(() => null);
       if (!result || !result.booking) return;
       state.currentBooking = result.booking;
-      if (state.currentBooking.status === 'completed' || state.currentBooking.status === 'cancelled') {
+      if ((state.currentBooking.status === 'completed' || state.currentBooking.status === 'cancelled') && !state.awaitingDamagePrompt) {
         document.getElementById('activeBookingBar').classList.remove('show');
         document.getElementById('towBanner').classList.remove('show');
         state.currentBooking = null;
@@ -621,6 +1024,7 @@
 
     initMap();
     initLocationAndData();
+    setupNotificationListener();
     json(`${apiBase}/bookings?driverId=${uid}&status=active,overstaying`).then((data) => {
       if ((data.bookings || []).length) {
         state.currentBooking = data.bookings[0];
