@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ParkShare - Hero</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    html,
+    body {
+      width: 100%;
+      background: #000;
+      color: #fff;
+      font-family: "Inter", sans-serif;
+    }
+
+    body {
+      cursor: none;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      opacity: 0.035;
+    }
+
+    #hero-video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .hero-scroll-space {
+      position: relative;
+      height: 1000vh;
+      z-index: 1;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .overlay.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .overlay.exit {
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+
+    .hero-copy {
+      max-width: 1200px;
+      padding: 0 2rem;
+    }
+
+    .headline {
+      font-family: "Playfair Display", serif;
+      font-size: 6vw;
+      font-weight: 700;
+      line-height: 1.05;
+      margin-bottom: 1.2rem;
+      text-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), 0 0 80px rgba(0, 212, 255, 0.15);
+    }
+
+    .subtitle {
+      font-size: 1.4vw;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      opacity: 0.75;
+    }
+
+    .top-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 2rem 4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: "Inter", sans-serif;
+      font-size: 0.9rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      z-index: 4;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      pointer-events: none;
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4) 0%, transparent 100%);
+    }
+
+    .accent-line {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: #00d4ff;
+      opacity: 0.6;
+      z-index: 9998;
+      pointer-events: none;
+    }
+
+    .stat-number {
+      color: #fff;
+    }
+
+    .stat-number::before {
+      content: "";
+      display: block;
+      width: 4px;
+      height: 4px;
+      background: #00d4ff;
+      margin-bottom: 1rem;
+    }
+
+    .custom-cursor {
+      width: 8px;
+      height: 8px;
+      border: 1px solid #fff;
+      border-radius: 50%;
+      position: fixed;
+      left: 0;
+      top: 0;
+      pointer-events: none;
+      z-index: 99999;
+      transform: translate(-50%, -50%) scale(1);
+      transition: transform 0.1s ease, background 0.1s ease;
+      background: transparent;
+    }
+
+    .custom-cursor.is-hovering {
+      transform: translate(-50%, -50%) scale(2);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .top-nav.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .top-nav.exit {
+      opacity: 0;
+      transform: translateY(-30px);
+      pointer-events: none;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .logo-box {
+      width: 1.9rem;
+      height: 1.9rem;
+      border: 1px solid #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.8rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: inherit;
+      text-decoration: none;
+      opacity: 0.9;
+      transition: opacity 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      opacity: 1;
+    }
+
+    .scroll-indicator {
+      position: fixed;
+      left: 4rem;
+      bottom: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.7rem;
+      z-index: 4;
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+      pointer-events: none;
+    }
+
+    .scroll-indicator.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .scroll-indicator.exit {
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+
+    .scroll-text {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      font-size: 0.65rem;
+      letter-spacing: 0.3em;
+      opacity: 0.9;
+    }
+
+    .scroll-line {
+      width: 1px;
+      height: 68px;
+      background: rgba(255, 255, 255, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scroll-line::after {
+      content: "";
+      position: absolute;
+      top: -100%;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      animation: line-wipe 1.6s linear infinite;
+    }
+
+    @keyframes line-wipe {
+      0% {
+        top: -100%;
+      }
+      100% {
+        top: 100%;
+      }
+    }
+
+    .cta-button {
+      margin-top: 2rem;
+      border: 1px solid #fff;
+      padding: 1rem 3rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      background: transparent;
+      color: #fff;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 0.78rem;
+      transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+      pointer-events: auto;
+      box-shadow: 0 0 18px rgba(255, 255, 255, 0.25);
+    }
+
+    .cta-button:hover {
+      background: #fff;
+      color: #000;
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.55);
+    }
+
+    .after-hero {
+      position: relative;
+      height: 100vh;
+      background: #0a0a0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+
+    .after-hero p {
+      font-family: "Inter", sans-serif;
+      font-size: 1rem;
+      opacity: 0.3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 1200px) {
+      .headline {
+        font-size: 9vw;
+      }
+      .subtitle {
+        font-size: 2.2vw;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .top-nav {
+        padding: 1.2rem 1.2rem;
+        font-size: 0.65rem;
+      }
+
+      .nav-links {
+        gap: 0.7rem;
+      }
+
+      .headline {
+        font-size: 12vw;
+      }
+
+      .subtitle {
+        font-size: 3.2vw;
+      }
+
+      .scroll-indicator {
+        left: 1.2rem;
+        bottom: 1.2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="accent-line" aria-hidden="true"></div>
+  <div id="custom-cursor" class="custom-cursor" aria-hidden="true"></div>
+
+  <video id="hero-video" muted playsinline preload="auto">
+    <source src="../parkshare-scroll.mp4" type="video/mp4" />
+  </video>
+
+  <nav id="hero-nav" class="top-nav">
+    <div class="brand">
+      <span class="logo-box">PS</span>
+      <span>ParkShare</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#">Home</a></li>
+      <li><a href="#">How It Works</a></li>
+      <li><a href="#">Features</a></li>
+      <li><a href="#">Contact</a></li>
+    </ul>
+  </nav>
+
+  <div id="scroll-indicator" class="scroll-indicator">
+    <span class="scroll-text">SCROLL</span>
+    <span class="scroll-line" aria-hidden="true"></span>
+  </div>
+
+  <div id="overlay-1" class="overlay">
+    <div class="hero-copy">
+      <h1 class="headline">The City Moves.</h1>
+      <p class="subtitle">Find your space, instantly.</p>
+    </div>
+  </div>
+
+  <div id="overlay-2" class="overlay">
+    <div class="hero-copy">
+      <h2 class="headline">AI That Thinks Ahead.</h2>
+      <p class="subtitle">Dynamic pricing. Real-time conflicts resolved.</p>
+    </div>
+  </div>
+
+  <div id="overlay-3" class="overlay">
+    <div class="hero-copy">
+      <h2 class="headline">For Drivers.</h2>
+      <p class="subtitle">Search. Book. Extend. All in seconds.</p>
+    </div>
+  </div>
+
+  <div id="overlay-4" class="overlay">
+    <div class="hero-copy">
+      <h2 class="headline">For Owners.</h2>
+      <p class="subtitle">List your space. Earn while you sleep.</p>
+    </div>
+  </div>
+
+  <div id="overlay-5" class="overlay">
+    <div class="hero-copy">
+      <h2 class="headline">Welcome to ParkShare.</h2>
+      <a class="cta-button" href="#">Explore the Platform</a>
+    </div>
+  </div>
+
+  <div class="hero-scroll-space" aria-hidden="true"></div>
+
+  <section class="after-hero">
+    <p>More coming soon</p>
+  </section>
+
+  <script>
+    const video = document.getElementById("hero-video");
+    const nav = document.getElementById("hero-nav");
+    const scrollIndicator = document.getElementById("scroll-indicator");
+    const customCursor = document.getElementById("custom-cursor");
+
+    const overlays = [
+      { element: document.getElementById("overlay-1"), start: 0, end: 0.15 },
+      { element: document.getElementById("overlay-2"), start: 0.15, end: 0.35 },
+      { element: document.getElementById("overlay-3"), start: 0.35, end: 0.55 },
+      { element: document.getElementById("overlay-4"), start: 0.55, end: 0.75 },
+      { element: document.getElementById("overlay-5"), start: 0.75, end: 1.0 }
+    ];
+
+    function setOverlayState(progress) {
+      overlays.forEach((item) => {
+        const { element, start, end } = item;
+        const isActive = progress >= start && progress < end;
+
+        element.classList.remove("active", "exit");
+
+        if (isActive) {
+          element.classList.add("active");
+        } else if (progress >= end) {
+          element.classList.add("exit");
+        }
+      });
+    }
+
+    function setNavAndIndicatorState(progress) {
+      nav.classList.remove("active", "exit");
+      scrollIndicator.classList.remove("active", "exit");
+
+      if (progress < 0.15) {
+        nav.classList.add("active");
+      } else {
+        nav.classList.add("exit");
+      }
+
+      if (progress < 0.1) {
+        scrollIndicator.classList.add("active");
+      } else {
+        scrollIndicator.classList.add("exit");
+      }
+    }
+
+    function updateFromScroll() {
+      const maxScrollable = document.body.scrollHeight - window.innerHeight;
+      const scrollProgress = maxScrollable > 0 ? window.scrollY / maxScrollable : 0;
+      const clampedProgress = Math.min(Math.max(scrollProgress, 0), 1);
+
+      video.currentTime = clampedProgress * 22;
+      setOverlayState(clampedProgress);
+      setNavAndIndicatorState(clampedProgress);
+    }
+
+    video.addEventListener("loadedmetadata", () => {
+      video.currentTime = 0;
+      updateFromScroll();
+    });
+
+    window.addEventListener("scroll", updateFromScroll);
+    window.addEventListener("resize", updateFromScroll);
+    updateFromScroll();
+
+    window.addEventListener("mousemove", (event) => {
+      customCursor.style.left = `${event.clientX}px`;
+      customCursor.style.top = `${event.clientY}px`;
+    });
+
+    document.querySelectorAll("a, button").forEach((element) => {
+      element.addEventListener("mouseenter", () => {
+        customCursor.classList.add("is-hovering");
+      });
+      element.addEventListener("mouseleave", () => {
+        customCursor.classList.remove("is-hovering");
+      });
+    });
+  </script>
+</body>
+</html>
