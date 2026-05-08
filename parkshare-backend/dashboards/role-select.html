@@ -160,7 +160,7 @@
         }
 
         sessionStorage.setItem('role', role);
-        window.location.href = role === 'driver' ? './driver.html' : './owner.html';
+        window.location.replace(role === 'driver' ? './driver.html' : './owner.html');
       } catch (error) {
         card.classList.remove('loading');
         errorMessage.textContent = 'We could not save your role. Please try once more.';

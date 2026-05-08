@@ -112,9 +112,27 @@
       font-size: 0.92rem;
       min-height: 20px;
     }
+    .session-banner {
+      width: min(460px, 100%);
+      margin-bottom: 12px;
+      background: rgba(255, 170, 0, 0.2);
+      border: 1px solid var(--warning);
+      color: #111;
+      font-weight: 600;
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
+  <div id="sessionBanner" class="session-banner" style="display:none;">
+    <span>Your session expired. Please sign in again.</span>
+    <button id="dismissSessionBanner" type="button">Dismiss</button>
+  </div>
   <main class="card">
     <h1 class="logo">ParkShare</h1>
     <p class="tagline">Smart parking, trusted drivers, effortless earnings.</p>
@@ -141,8 +159,19 @@
 
     const button = document.getElementById('googleSignInBtn');
     const errorMessage = document.getElementById('errorMessage');
+    const sessionBanner = document.getElementById('sessionBanner');
     const apiBase = 'http://localhost:3001/api';
     const defaultButtonText = 'Continue with Google';
+
+    const existingUid = sessionStorage.getItem('uid');
+    const existingRole = sessionStorage.getItem('role');
+    if (existingUid && existingRole) {
+      window.location.replace(existingRole === 'driver' ? './driver.html' : './owner.html');
+    }
+    if (new URLSearchParams(window.location.search).get('reason') === 'session_expired') {
+      sessionBanner.style.display = 'flex';
+    }
+    document.getElementById('dismissSessionBanner').onclick = () => { sessionBanner.style.display = 'none'; };
 
     function hasPlaceholderConfig() {
       return Object.values(firebaseConfig).some((value) => String(value).startsWith('PASTE_YOUR_FIREBASE_'));
@@ -190,11 +219,11 @@
         sessionStorage.setItem('role', profile.role || '');
 
         if (!profile.role) {
-          window.location.href = './role-select.html';
+          window.location.replace('./role-select.html');
         } else if (profile.role === 'driver') {
-          window.location.href = './driver.html';
+          window.location.replace('./driver.html');
         } else {
-          window.location.href = './owner.html';
+          window.location.replace('./owner.html');
         }
       } catch (error) {
         const code = error?.code ? ` (${error.code})` : '';

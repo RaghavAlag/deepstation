@@ -60,6 +60,9 @@
   <section id="notifDropdown" class="card" style="display:none;position:fixed;top:68px;right:16px;z-index:1200;min-width:320px;max-width:420px;max-height:420px;overflow:auto;"></section>
 
   <div id="map"></div>
+  <div id="serverBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1400;background:#ffaa00;color:#111;padding:10px;text-align:center;font-weight:700;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
+  <div id="mapLoadingOverlay" class="card" style="display:none;position:fixed;top:120px;left:50%;transform:translateX(-50%);z-index:900;">Loading spots...</div>
+  <div id="mapEmptyOverlay" class="card muted" style="display:none;position:fixed;top:160px;left:50%;transform:translateX(-50%);z-index:900;text-align:center;">🧭 No parking spots found nearby. Try zooming out or searching a different area.</div>
   <div class="floating-search">
     <div class="search-box"><span>🔍</span><input id="searchInput" placeholder="Search location..." /></div>
     <div id="suggestions" class="suggestions" style="display:none;"></div>
@@ -113,6 +116,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script>
     const uid = sessionStorage.getItem('uid');
     const role = sessionStorage.getItem('role');
@@ -129,6 +133,7 @@
     };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const firestore = firebase.firestore();
+    const auth = firebase.auth();
     const state = {
       map: null,
       userPos: { lat: 18.9667, lng: 72.8333 },
@@ -178,11 +183,41 @@
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     };
 
+    function showServerBanner() {
+      document.getElementById('serverBanner').style.display = 'block';
+    }
+    function hideServerBanner() {
+      document.getElementById('serverBanner').style.display = 'none';
+    }
+
     const json = async (url, options = {}) => {
-      const res = await fetch(url, options);
-      if (!res.ok) throw new Error((await res.text()) || 'Request failed');
-      return res.json();
+      try {
+        const res = await fetch(url, options);
+        hideServerBanner();
+        if (!res.ok) throw new Error((await res.text()) || 'Request failed');
+        return res.json();
+      } catch (error) {
+        showServerBanner();
+        throw error;
+      }
     };
+
+    async function verifySessionOnLoad() {
+      try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const freshToken = await currentUser.getIdToken(true);
+          await fetch(`${apiBase}/auth/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: freshToken })
+          });
+        }
+      } catch (error) {
+        sessionStorage.clear();
+        window.location.replace('./login.html?reason=session_expired');
+      }
+    }
 
     function relativeTime(input) {
       const ms = Date.now() - new Date(input || Date.now()).getTime();
@@ -413,7 +448,7 @@
             mediaRecorder.stop();
           }
         } catch (error) {
-          status.textContent = 'Camera access failed. You can use Skip (Demo).';
+          status.textContent = 'Camera not available on this device or browser. You can skip video recording for the demo.';
         }
       };
 
@@ -755,7 +790,8 @@
           document.getElementById('bookingError').textContent =
             `This spot is already booked for that time.${endHint} Please choose another spot or duration.`;
         } else {
-          document.getElementById('bookingError').textContent = 'Booking failed. Please retry.';
+          document.getElementById('bookingError').textContent = 'Something went wrong. Please try again.';
+          showToast('Something went wrong. Please try again.', 'warning');
         }
       } finally {
         btn.disabled = false;
@@ -971,7 +1007,7 @@
             <div class="muted">${new Date(b.startTime).toLocaleString()} • ${b.durationHours || 0}h</div>
             <div>₹${b.totalAmount || 0} <span class="status-chip ${statusChipClass(b.status)}">${b.status || ''}</span></div>
           </article>
-        `).join('') || '<p class="muted">No booking history yet.</p>'}
+        `).join('') || '<p class="muted">🧾 No bookings yet. Find a spot on the map and book your first space!</p>'}
       `;
       panel.classList.add('open');
       document.getElementById('closeHistory').onclick = () => panel.classList.remove('open');
@@ -1006,9 +1042,12 @@
     });
 
     async function loadNearbySpots() {
+      document.getElementById('mapLoadingOverlay').style.display = 'block';
       const data = await json(`${apiBase}/spots/nearby?lat=${state.userPos.lat}&lng=${state.userPos.lng}&radius=10`).catch(() => ({ spots: [] }));
       state.spots = data.spots || [];
       await renderMarkers(state.spots);
+      document.getElementById('mapLoadingOverlay').style.display = 'none';
+      document.getElementById('mapEmptyOverlay').style.display = state.spots.length ? 'none' : 'block';
     }
 
     function initLocationAndData() {
@@ -1023,6 +1062,7 @@
     }
 
     initMap();
+    verifySessionOnLoad();
     initLocationAndData();
     setupNotificationListener();
     json(`${apiBase}/bookings?driverId=${uid}&status=active,overstaying`).then((data) => {

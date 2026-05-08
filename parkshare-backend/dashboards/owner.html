@@ -37,6 +37,7 @@
   </style>
 </head>
 <body>
+  <div id="serverBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1400;background:#ffaa00;color:#111;padding:10px;text-align:center;font-weight:700;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
   <header class="navbar">
     <div class="nav-brand">ParkShare</div>
     <div class="profile">
@@ -74,6 +75,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script type="module">
     const uid = sessionStorage.getItem('uid');
     const role = sessionStorage.getItem('role');
@@ -92,6 +94,7 @@
     };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const firestore = firebase.firestore();
+    const auth = firebase.auth();
     const ownerName = sessionStorage.getItem('name') || 'Owner';
     const ownerPhoto = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
     const state = { currentTab: 'active', activeBookings: [], editingSpotId: null, uploadedImages: [], notifications: [], seenNotifIds: new Set() };
@@ -138,19 +141,49 @@
       setTimeout(() => el.remove(), 4000);
     }
 
+    function showServerBanner() {
+      document.getElementById('serverBanner').style.display = 'block';
+    }
+    function hideServerBanner() {
+      document.getElementById('serverBanner').style.display = 'none';
+    }
+
     async function fetchJSON(url, options = {}) {
-      const res = await fetch(url, options);
-      if (!res.ok) {
-        let detail = 'Request failed';
-        try {
-          const data = await res.json();
-          detail = data.error || JSON.stringify(data);
-        } catch {
-          detail = await res.text();
+      try {
+        const res = await fetch(url, options);
+        hideServerBanner();
+        if (!res.ok) {
+          let detail = 'Request failed';
+          try {
+            const data = await res.json();
+            detail = data.error || JSON.stringify(data);
+          } catch {
+            detail = await res.text();
+          }
+          throw new Error(detail || 'Request failed');
         }
-        throw new Error(detail || 'Request failed');
+        return res.json();
+      } catch (error) {
+        showServerBanner();
+        throw error;
       }
-      return res.json();
+    }
+
+    async function verifySessionOnLoad() {
+      try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          const freshToken = await currentUser.getIdToken(true);
+          await fetch(`${apiBase}/auth/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: freshToken })
+          });
+        }
+      } catch (error) {
+        sessionStorage.clear();
+        window.location.replace('./login.html?reason=session_expired');
+      }
     }
 
     function relativeTime(input) {
@@ -273,7 +306,7 @@
 
     function renderActive(list) {
       const root = document.getElementById('tab-active');
-      if (!list.length) return (root.innerHTML = '<div class="card muted">No active bookings.</div>');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">🅿️ No active bookings right now. Your spot is available!</div>');
       root.innerHTML = list.map((b) => `
         <article class="card booking-card">
           <div style="display:flex;justify-content:space-between;gap:10px;">
@@ -301,7 +334,7 @@
 
     function renderPreBooked(list) {
       const root = document.getElementById('tab-upcoming');
-      if (!list.length) return (root.innerHTML = '<div class="card muted">No pre-booked trips.</div>');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">📅 No upcoming bookings yet.</div>');
       root.innerHTML = list.sort((a,b)=>new Date(a.startTime)-new Date(b.startTime)).map((b) => `
         <article class="card booking-card"><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}
         <div class="muted">${new Date(b.startTime).toLocaleString()} → ${new Date(b.endTime).toLocaleString()}</div>
@@ -327,7 +360,7 @@
 
     function renderHistory(list) {
       const root = document.getElementById('tab-history');
-      if (!list.length) return (root.innerHTML = '<div class="card muted">No history records.</div>');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">📚 No booking history yet. Share your spot to start earning!</div>');
       root.innerHTML = list.map((b) => `
         <article class="card booking-card">
           <div><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}</div>
@@ -426,7 +459,11 @@
 
     function renderSpots(list) {
       const root = document.getElementById('tab-spots');
-      if (!list.length) return (root.innerHTML = '<div class="card muted">No spots listed yet.</div>');
+      if (!list.length) {
+        root.innerHTML = '<div class="card muted">📍 You haven\'t listed any spots yet.</div><button id="listFirstSpotBtn" class="btn-primary" style="margin-top:8px;">List Your First Spot →</button>';
+        document.getElementById('listFirstSpotBtn').onclick = () => setTab('list');
+        return;
+      }
       root.innerHTML = list.map((s) => `
         <article class="card spot-card">
           <div><strong>${s.title}</strong></div>
@@ -540,19 +577,23 @@
     setInterval(updateCountdowns, 1000);
 
     async function loadActive() {
+      document.getElementById('tab-active').innerHTML = '<div class="card"><div class="skeleton" style="height:18px;margin-bottom:8px;"></div><div class="skeleton" style="height:14px;width:70%;"></div></div>';
       const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=active`).catch(() => ({ bookings: [] }));
       state.activeBookings = data.bookings || [];
       renderActive(state.activeBookings);
     }
     async function loadUpcoming() {
+      document.getElementById('tab-upcoming').innerHTML = '<div class="card"><div class="skeleton" style="height:18px;margin-bottom:8px;"></div><div class="skeleton" style="height:14px;width:70%;"></div></div>';
       const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=upcoming`).catch(() => ({ bookings: [] }));
       renderPreBooked(data.bookings || []);
     }
     async function loadHistory() {
+      document.getElementById('tab-history').innerHTML = '<div class="card"><div class="skeleton" style="height:18px;margin-bottom:8px;"></div><div class="skeleton" style="height:14px;width:70%;"></div></div>';
       const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=completed,cancelled`).catch(() => ({ bookings: [] }));
       renderHistory(data.bookings || []);
     }
     async function loadSpots() {
+      document.getElementById('tab-spots').innerHTML = '<div class="card"><div class="skeleton" style="height:18px;margin-bottom:8px;"></div><div class="skeleton" style="height:14px;width:70%;"></div></div>';
       const data = await fetchJSON(`${apiBase}/spots?ownerId=${uid}`).catch(() => ({ spots: [] }));
       renderSpots(data.spots || []);
     }
@@ -567,6 +608,7 @@
 
     setInterval(() => { if (state.currentTab === 'active') loadActive(); }, 30000);
     setInterval(() => { if (state.currentTab === 'history') loadHistory(); }, 15000);
+    verifySessionOnLoad();
     setupNotificationListener();
     loadTab('active');
   </script>
