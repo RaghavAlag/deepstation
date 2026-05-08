@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Select Role | ParkShare</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --card: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.08);
+      --accent: #00d4ff;
+      --gold: #f0c060;
+      --text: #ffffff;
+      --muted: rgba(255, 255, 255, 0.5);
+      --danger: #ff4444;
+      --success: #00ff88;
+      --warning: #ffaa00;
+      --font-head: 'Playfair Display', serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: min(960px, 100%);
+    }
+
+    h1 {
+      text-align: center;
+      margin: 0 0 28px;
+      font-family: var(--font-head);
+      font-size: clamp(1.9rem, 4vw, 2.6rem);
+      font-weight: 700;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .role-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 26px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      backdrop-filter: blur(10px);
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .role-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 28px rgba(0, 212, 255, 0.24);
+      transform: translateY(-2px);
+    }
+
+    .role-card.loading {
+      opacity: 0.75;
+      pointer-events: none;
+    }
+
+    .emoji {
+      font-size: 3rem;
+      line-height: 1;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      max-width: 28ch;
+    }
+
+    .error {
+      min-height: 20px;
+      margin-top: 14px;
+      color: var(--danger);
+      text-align: center;
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 780px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>How will you use ParkShare?</h1>
+    <section class="cards">
+      <article class="role-card" data-role="driver" tabindex="0" role="button">
+        <div class="emoji" aria-hidden="true">🚗</div>
+        <h2 class="title">I'm a Driver</h2>
+        <p class="subtitle">Find and book parking spots near you</p>
+      </article>
+      <article class="role-card" data-role="owner" tabindex="0" role="button">
+        <div class="emoji" aria-hidden="true">🅿️</div>
+        <h2 class="title">I'm a Parking Owner</h2>
+        <p class="subtitle">List your space and earn money</p>
+      </article>
+    </section>
+    <p id="errorMessage" class="error" role="alert"></p>
+  </main>
+
+  <script>
+    const uid = sessionStorage.getItem('uid');
+    if (!uid) {
+      window.location.replace('./login.html');
+    }
+
+    const cards = Array.from(document.querySelectorAll('.role-card'));
+    const errorMessage = document.getElementById('errorMessage');
+    const apiBase = 'http://localhost:3001/api';
+
+    async function chooseRole(role, card) {
+      errorMessage.textContent = '';
+      cards.forEach((entry) => entry.classList.remove('loading'));
+      card.classList.add('loading');
+
+      try {
+        const response = await fetch(`${apiBase}/auth/set-role`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid, role })
+        });
+
+        if (!response.ok) {
+          throw new Error('Role update failed');
+        }
+
+        sessionStorage.setItem('role', role);
+        window.location.href = role === 'driver' ? './driver.html' : './owner.html';
+      } catch (error) {
+        card.classList.remove('loading');
+        errorMessage.textContent = 'We could not save your role. Please try once more.';
+      }
+    }
+
+    cards.forEach((card) => {
+      const role = card.getAttribute('data-role');
+      card.addEventListener('click', () => chooseRole(role, card));
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          chooseRole(role, card);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
