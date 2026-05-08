@@ -14,7 +14,7 @@ app.get('/api/health', (req, res) => {
 
 // Routes (added in later phases)
 app.use('/api/auth', require('./routes/auth'));
-// app.use('/api/spots', require('./routes/spots'));
+app.use('/api/spots', require('./routes/spots'));
 // app.use('/api/bookings', require('./routes/bookings'));
 // app.use('/api/extensions', require('./routes/extensions'));
 // app.use('/api/damage', require('./routes/damage'));

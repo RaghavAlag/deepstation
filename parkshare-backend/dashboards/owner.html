@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Owner Dashboard | ParkShare</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/dashboard.css" />
+  <style>
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 64px); }
+    .sidebar { border-right: 1px solid var(--border); padding: 14px; background: #0d0d0d; }
+    .sidebar button, .mobile-tabs button { width: 100%; margin-bottom: 8px; }
+    .content { padding: 16px; }
+    .hidden { display: none !important; }
+    .nav-brand { font-family: var(--font-head); color: var(--accent); font-size: 1.6rem; }
+    .profile { display: flex; align-items: center; gap: 10px; }
+    .profile img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .booking-card, .spot-card { margin-bottom: 10px; }
+    .muted { color: var(--muted); }
+    .pill-danger { color: #fff; background: rgba(255,68,68,0.16); border-color: var(--danger); }
+    .damage-section { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+    .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: .8rem; }
+    .progress { width: 100%; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
+    .progress > span { display: block; height: 100%; background: var(--accent); }
+    .mobile-tabs { display: none; position: fixed; bottom: 0; left: 0; right: 0; border-top: 1px solid var(--border); background: var(--surface); padding: 8px; gap: 8px; }
+    .table-form input, .table-form textarea, .table-form select { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #111; color: var(--text); }
+    .field { margin-bottom: 10px; }
+    .label { display:block; margin-bottom: 6px; color: var(--muted); }
+    .progress-item { margin: 6px 0; }
+    .badge-success { background: rgba(0,255,136,.15); border-color: var(--success); }
+    .badge-warning { background: rgba(255,170,0,.15); border-color: var(--warning); }
+    .badge-danger { background: rgba(255,68,68,.15); border-color: var(--danger); }
+    @media (max-width: 920px){ .layout{grid-template-columns:1fr;} .sidebar{display:none;} .mobile-tabs{display:flex;} .content{padding-bottom:80px;} }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <div class="nav-brand">ParkShare</div>
+    <div class="profile">
+      <button class="btn-secondary" title="Notifications">🔔 <span id="notifBadge" class="badge">0</span></button>
+      <span id="ownerName"></span>
+      <img id="ownerAvatar" alt="Owner avatar" />
+      <button id="signOutBtn" class="btn-danger">Sign Out</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="sidebar">
+      <button class="btn-secondary tab-btn" data-tab="active">Active Bookings</button>
+      <button class="btn-secondary tab-btn" data-tab="upcoming">Pre-Booked</button>
+      <button class="btn-secondary tab-btn" data-tab="history">History</button>
+      <button class="btn-secondary tab-btn" data-tab="spots">My Spots</button>
+      <button class="btn-primary tab-btn" data-tab="list">+ List Spot</button>
+    </aside>
+    <main class="content">
+      <section id="tab-active" class="panel active"></section>
+      <section id="tab-upcoming" class="panel"></section>
+      <section id="tab-history" class="panel"></section>
+      <section id="tab-spots" class="panel"></section>
+      <section id="tab-list" class="panel"></section>
+    </main>
+  </div>
+  <nav class="mobile-tabs">
+    <button class="btn-secondary tab-btn" data-tab="active">Active</button>
+    <button class="btn-secondary tab-btn" data-tab="upcoming">Pre</button>
+    <button class="btn-secondary tab-btn" data-tab="history">History</button>
+    <button class="btn-secondary tab-btn" data-tab="spots">Spots</button>
+    <button class="btn-primary tab-btn" data-tab="list">List</button>
+  </nav>
+  <div class="toast-wrap" id="toastWrap"></div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js';
+
+    const uid = sessionStorage.getItem('uid');
+    const role = sessionStorage.getItem('role');
+    if (!uid || role !== 'owner') {
+      window.location.replace('./login.html');
+    }
+
+    const firebaseConfig = {
+      apiKey: 'PASTE_YOUR_FIREBASE_API_KEY_HERE',
+      authDomain: 'PASTE_YOUR_FIREBASE_AUTH_DOMAIN_HERE',
+      projectId: 'PASTE_YOUR_FIREBASE_PROJECT_ID_HERE',
+      storageBucket: 'PASTE_YOUR_FIREBASE_STORAGE_BUCKET_HERE',
+      messagingSenderId: 'PASTE_YOUR_FIREBASE_MESSAGING_SENDER_ID_HERE',
+      appId: 'PASTE_YOUR_FIREBASE_APP_ID_HERE'
+    };
+    const storage = getStorage(initializeApp(firebaseConfig));
+
+    const apiBase = 'http://localhost:3001/api';
+    const ownerName = sessionStorage.getItem('name') || 'Owner';
+    const ownerPhoto = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
+    const state = { currentTab: 'active', activeBookings: [], editingSpotId: null, uploadedImages: [] };
+
+    document.getElementById('ownerName').textContent = ownerName;
+    document.getElementById('ownerAvatar').src = ownerPhoto;
+    document.getElementById('signOutBtn').addEventListener('click', () => {
+      sessionStorage.clear();
+      window.location.href = './login.html';
+    });
+
+    function showToast(message) {
+      const wrap = document.getElementById('toastWrap');
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = message;
+      wrap.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    async function fetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error('Request failed');
+      return res.json();
+    }
+
+    function setTab(tab) {
+      state.currentTab = tab;
+      document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      loadTab(tab);
+    }
+    document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+
+    function countdownText(endTime) {
+      const diff = new Date(endTime).getTime() - Date.now();
+      if (diff <= 0) return 'Expired';
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      return `${h}h ${m}m ${s}s`;
+    }
+
+    function severityClass(sev) {
+      if (sev === 'severe') return 'badge-danger';
+      if (sev === 'moderate') return 'pill-danger';
+      if (sev === 'minor') return 'badge-warning';
+      return 'badge-success';
+    }
+
+    function renderActive(list) {
+      const root = document.getElementById('tab-active');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">No active bookings.</div>');
+      root.innerHTML = list.map((b) => `
+        <article class="card booking-card">
+          <div style="display:flex;justify-content:space-between;gap:10px;">
+            <div><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}</div>
+            ${b.status === 'overstaying' ? '<span class="badge pill-danger">OVERSTAYING</span>' : ''}
+          </div>
+          <div class="muted" data-countdown="${b.bookingId}" data-end="${b.endTime}"></div>
+          <div>Amount: ₹${b.totalAmount || 0}</div>
+          <button class="btn-danger block-btn" data-spot="${b.spotId}" data-driver="${b.driverId}">Block Driver</button>
+        </article>`).join('');
+      root.querySelectorAll('.block-btn').forEach((btn) => btn.addEventListener('click', async () => {
+        try {
+          await fetchJSON(`${apiBase}/spots/${btn.dataset.spot}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blockDriverUid: btn.dataset.driver })
+          });
+          showToast('Driver blocked for this spot.');
+        } catch {
+          showToast('Could not block driver.');
+        }
+      }));
+      updateCountdowns();
+    }
+
+    function renderPreBooked(list) {
+      const root = document.getElementById('tab-upcoming');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">No pre-booked trips.</div>');
+      root.innerHTML = list.sort((a,b)=>new Date(a.startTime)-new Date(b.startTime)).map((b) => `
+        <article class="card booking-card"><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}
+        <div class="muted">${new Date(b.startTime).toLocaleString()} → ${new Date(b.endTime).toLocaleString()}</div>
+        <div>Amount: ₹${b.totalAmount || 0}</div></article>`).join('');
+    }
+
+    function damageMarkup(b) {
+      const r = b.damageReport || {};
+      const areas = Array.isArray(r.areas) ? r.areas : [];
+      const conf = Number(r.confidence || 0);
+      return `
+        <div class="damage-section">
+          <div class="chips">${areas.map((a) => `<span class="chip">${a}</span>`).join('')}</div>
+          <span class="badge ${severityClass(r.severity)}">${r.severity || 'none'}</span>
+          <div class="progress" style="margin:8px 0;"><span style="width:${conf}%;"></span></div>
+          <div>Estimated repair: ₹${r.estimatedRepairCost || 0}</div>
+          <div><span class="badge">${r.recommendation || 'Investigate'}</span></div>
+          <p class="muted">${r.remarks || 'No remarks available.'}</p>
+          <button class="btn-primary claim-btn" data-id="${b.bookingId}" data-decision="accepted">Accept Claim</button>
+          <button class="btn-danger claim-btn" data-id="${b.bookingId}" data-decision="rejected">Reject Claim</button>
+        </div>`;
+    }
+
+    function renderHistory(list) {
+      const root = document.getElementById('tab-history');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">No history records.</div>');
+      root.innerHTML = list.map((b) => `
+        <article class="card booking-card">
+          <div><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}</div>
+          <div class="muted">${new Date(b.endTime || Date.now()).toLocaleDateString()} • ${b.durationHours || 0}h</div>
+          <div>Earned: ₹${b.totalAmount || 0} <span class="badge">${b.status || ''}</span></div>
+          ${b.damageClaimStatus === 'pending' ? `<button class="btn-danger dmg-toggle" data-id="${b.bookingId}">Damage Claim</button><div id="dmg-${b.bookingId}" class="hidden">${damageMarkup(b)}</div>` : ''}
+        </article>`).join('');
+      root.querySelectorAll('.dmg-toggle').forEach((btn) => btn.addEventListener('click', () => {
+        document.getElementById(`dmg-${btn.dataset.id}`).classList.toggle('hidden');
+      }));
+      root.querySelectorAll('.claim-btn').forEach((btn) => btn.addEventListener('click', async () => {
+        try {
+          await fetchJSON(`${apiBase}/bookings/${btn.dataset.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ damageClaimStatus: 'resolved', ownerDecision: btn.dataset.decision })
+          });
+          showToast('Damage claim updated.');
+        } catch {
+          showToast('Could not update damage claim.');
+        }
+      }));
+    }
+
+    function spotFormHTML() {
+      return `
+        <form id="spotForm" class="card table-form">
+          <div class="field"><label class="label">Title</label><input required name="title" /></div>
+          <div class="field"><label class="label">Address</label><input required name="address" /></div>
+          <div class="field"><label class="label">Description</label><textarea name="description"></textarea></div>
+          <div class="grid grid-2">
+            <div class="field"><label class="label">Latitude</label><input required type="number" step="any" name="latitude" /></div>
+            <div class="field"><label class="label">Longitude</label><input required type="number" step="any" name="longitude" /></div>
+          </div>
+          <div class="field"><label class="label">Vehicle Types</label>
+            <label><input type="checkbox" name="vehicleTypes" value="Car" /> Car</label>
+            <label><input type="checkbox" name="vehicleTypes" value="Bike" /> Bike</label>
+            <label><input type="checkbox" name="vehicleTypes" value="Truck" /> Truck</label>
+          </div>
+          <div class="grid grid-3">
+            <label><input type="checkbox" name="isCovered" /> Covered parking</label>
+            <label><input type="checkbox" name="hasEVCharging" /> EV Charging</label>
+            <label><input type="checkbox" name="hasCCTV" /> CCTV</label>
+          </div>
+          <div class="grid grid-2">
+            <div class="field"><label class="label">Hourly Rate (₹)</label><input required type="number" name="baseHourlyRate" /></div>
+            <div class="field"><label class="label">Daily Rate (₹)</label><input required type="number" name="baseDailyRate" /></div>
+          </div>
+          <div class="grid grid-2">
+            <div class="field"><label class="label">Available From</label><input required type="time" name="availableFrom" /></div>
+            <div class="field"><label class="label">Available To</label><input required type="time" name="availableTo" /></div>
+          </div>
+          <div class="field"><label class="label">Images (max 5)</label><input id="spotImages" type="file" accept="image/*" multiple /></div>
+          <div id="uploadProgress"></div>
+          <button class="btn-primary" type="submit">${state.editingSpotId ? 'Save Changes' : 'List Spot'}</button>
+        </form>`;
+    }
+
+    async function uploadImages(files, spotId) {
+      const bar = document.getElementById('uploadProgress');
+      const urls = [];
+      for (const file of files.slice(0, 5)) {
+        const row = document.createElement('div');
+        row.className = 'progress-item';
+        row.innerHTML = `<div class="muted">${file.name}</div><div class="progress"><span style="width:0%"></span></div>`;
+        bar.appendChild(row);
+        const fill = row.querySelector('span');
+        const fileRef = ref(storage, `spots/${spotId}/images/${Date.now()}-${file.name}`);
+        const task = uploadBytesResumable(fileRef, file);
+        await new Promise((resolve, reject) => {
+          task.on('state_changed', (snap) => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            fill.style.width = `${pct}%`;
+          }, reject, async () => {
+            urls.push(await getDownloadURL(task.snapshot.ref));
+            resolve();
+          });
+        });
+      }
+      return urls;
+    }
+
+    function renderSpots(list) {
+      const root = document.getElementById('tab-spots');
+      if (!list.length) return (root.innerHTML = '<div class="card muted">No spots listed yet.</div>');
+      root.innerHTML = list.map((s) => `
+        <article class="card spot-card">
+          <div><strong>${s.title}</strong></div>
+          <div class="muted">${s.address}</div>
+          <div>₹${s.baseHourlyRate || 0}/hour • <span class="badge">${s.isActive ? 'Active' : 'Inactive'}</span></div>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="toggle-switch ${s.isActive ? 'active' : ''}" data-toggle="${s.spotId}" title="Toggle active"></button>
+            <button class="btn-secondary edit-spot" data-id="${s.spotId}">Edit</button>
+            <button class="btn-danger del-spot" data-id="${s.spotId}">Delete</button>
+          </div>
+        </article>`).join('');
+      root.querySelectorAll('[data-toggle]').forEach((t) => t.addEventListener('click', async () => {
+        const id = t.dataset.toggle;
+        const src = list.find((x) => x.spotId === id);
+        await fetchJSON(`${apiBase}/spots/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: !src.isActive }) });
+        showToast('Spot status updated.');
+        loadSpots();
+      }));
+      root.querySelectorAll('.del-spot').forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Delete this spot?')) return;
+        await fetchJSON(`${apiBase}/spots/${b.dataset.id}`, { method: 'DELETE' });
+        showToast('Spot deleted.');
+        loadSpots();
+      }));
+      root.querySelectorAll('.edit-spot').forEach((b) => b.addEventListener('click', () => {
+        const spot = list.find((x) => x.spotId === b.dataset.id);
+        state.editingSpotId = spot.spotId;
+        setTab('list');
+        setTimeout(() => fillSpotForm(spot), 50);
+      }));
+    }
+
+    function fillSpotForm(spot) {
+      const form = document.getElementById('spotForm');
+      if (!form) return;
+      Object.entries({
+        title: spot.title, address: spot.address, description: spot.description,
+        latitude: spot.latitude, longitude: spot.longitude,
+        baseHourlyRate: spot.baseHourlyRate, baseDailyRate: spot.baseDailyRate,
+        availableFrom: spot.availableFrom, availableTo: spot.availableTo
+      }).forEach(([k, v]) => { if (form.elements[k]) form.elements[k].value = v ?? ''; });
+      ['Car', 'Bike', 'Truck'].forEach((t) => {
+        const checkbox = form.querySelector(`input[name="vehicleTypes"][value="${t}"]`);
+        checkbox.checked = (spot.vehicleTypes || []).includes(t);
+      });
+      form.elements.isCovered.checked = !!spot.isCovered;
+      form.elements.hasEVCharging.checked = !!spot.hasEVCharging;
+      form.elements.hasCCTV.checked = !!spot.hasCCTV;
+    }
+
+    function renderListForm() {
+      const root = document.getElementById('tab-list');
+      root.innerHTML = spotFormHTML();
+      const form = document.getElementById('spotForm');
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const files = Array.from(document.getElementById('spotImages').files || []);
+        const localSpotId = state.editingSpotId || crypto.randomUUID();
+        const uploaded = files.length ? await uploadImages(files, localSpotId) : [];
+        const payload = {
+          ownerId: uid,
+          ownerName,
+          title: fd.get('title'),
+          address: fd.get('address'),
+          description: fd.get('description'),
+          latitude: Number(fd.get('latitude')),
+          longitude: Number(fd.get('longitude')),
+          vehicleTypes: fd.getAll('vehicleTypes'),
+          isCovered: form.elements.isCovered.checked,
+          hasEVCharging: form.elements.hasEVCharging.checked,
+          hasCCTV: form.elements.hasCCTV.checked,
+          baseHourlyRate: Number(fd.get('baseHourlyRate')),
+          baseDailyRate: Number(fd.get('baseDailyRate')),
+          availableFrom: fd.get('availableFrom'),
+          availableTo: fd.get('availableTo'),
+          images: uploaded
+        };
+        try {
+          if (state.editingSpotId) {
+            await fetchJSON(`${apiBase}/spots/${state.editingSpotId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            showToast('Spot updated successfully! ✅');
+          } else {
+            await fetchJSON(`${apiBase}/spots`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            showToast('Spot listed successfully! ✅');
+          }
+          form.reset();
+          document.getElementById('uploadProgress').innerHTML = '';
+          state.editingSpotId = null;
+          loadSpots();
+        } catch {
+          showToast('Could not save spot.');
+        }
+      });
+    }
+
+    function updateCountdowns() {
+      document.querySelectorAll('[data-countdown]').forEach((el) => {
+        el.textContent = `Time remaining: ${countdownText(el.dataset.end)}`;
+      });
+    }
+    setInterval(updateCountdowns, 1000);
+
+    async function loadActive() {
+      const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=active`).catch(() => ({ bookings: [] }));
+      state.activeBookings = data.bookings || [];
+      renderActive(state.activeBookings);
+    }
+    async function loadUpcoming() {
+      const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=upcoming`).catch(() => ({ bookings: [] }));
+      renderPreBooked(data.bookings || []);
+    }
+    async function loadHistory() {
+      const data = await fetchJSON(`${apiBase}/bookings?ownerId=${uid}&status=completed,cancelled`).catch(() => ({ bookings: [] }));
+      renderHistory(data.bookings || []);
+    }
+    async function loadSpots() {
+      const data = await fetchJSON(`${apiBase}/spots?ownerId=${uid}`).catch(() => ({ spots: [] }));
+      renderSpots(data.spots || []);
+    }
+
+    async function loadTab(tab) {
+      if (tab === 'active') return loadActive();
+      if (tab === 'upcoming') return loadUpcoming();
+      if (tab === 'history') return loadHistory();
+      if (tab === 'spots') return loadSpots();
+      if (tab === 'list') return renderListForm();
+    }
+
+    setInterval(() => { if (state.currentTab === 'active') loadActive(); }, 30000);
+    loadTab('active');
+  </script>
+</body>
+</html>
