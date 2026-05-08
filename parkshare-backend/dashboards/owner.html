@@ -71,7 +71,7 @@
     <button class="btn-secondary tab-btn" data-tab="spots">Spots</button>
     <button class="btn-primary tab-btn" data-tab="list">List</button>
   </nav>
-  <div class="toast-wrap" id="toastWrap"></div>
+  <div class="toast-mini-wrap" id="toastWrap"></div>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
@@ -120,25 +120,15 @@
     });
 
     function showToast(message, type = 'info') {
-      const colors = { success: '#00ff88', warning: '#ffaa00', danger: '#ff4444', info: '#00d4ff' };
-      const stack = document.querySelectorAll('.custom-toast').length;
+      const variant = ['success', 'warning', 'danger', 'info'].includes(type) ? type : 'info';
+      const wrap = document.getElementById('toastWrap');
       const el = document.createElement('div');
-      el.className = 'custom-toast';
+      el.className = `toast-mini toast-mini--${variant}`;
       el.textContent = message;
-      el.style.position = 'fixed';
-      el.style.right = '24px';
-      el.style.bottom = `${24 + stack * 60}px`;
-      el.style.background = colors[type] || colors.info;
-      el.style.color = '#0a0a0a';
-      el.style.borderRadius = '10px';
-      el.style.fontWeight = '700';
-      el.style.padding = '10px 14px';
-      el.style.zIndex = '1300';
-      el.style.transform = 'translateX(120%)';
-      el.style.transition = 'transform 180ms ease';
-      document.body.appendChild(el);
-      requestAnimationFrame(() => { el.style.transform = 'translateX(0)'; });
-      setTimeout(() => el.remove(), 4000);
+      wrap.appendChild(el);
+      setTimeout(() => {
+        el.remove();
+      }, 4200);
     }
 
     function showServerBanner() {
@@ -256,6 +246,7 @@
       });
     }
 
+    let notificationsInitialSnapshot = true;
     function setupNotificationListener() {
       firestore
         .collection('notifications')
@@ -268,15 +259,17 @@
           renderNotifDropdown();
           snapshot.docChanges().forEach((change) => {
             if (change.type !== 'added') return;
+            if (notificationsInitialSnapshot) return;
             const data = change.doc.data();
             if (state.seenNotifIds.has(change.doc.id)) return;
             state.seenNotifIds.add(change.doc.id);
-            if (data.type === 'overstaying') showToast(`⚠️ ${data.message}`, 'warning');
-            if (data.type === 'tow_alert') showToast(`🚨 ${data.message}`, 'danger');
+            if (data.type === 'overstaying') showToast(`${data.message}`, 'warning');
+            if (data.type === 'tow_alert') showToast(`${data.message}`, 'danger');
             if (data.type === 'booking_confirmed') showToast(data.message, 'success');
             if (data.type === 'extension_approved') showToast(data.message, 'success');
             if (data.type === 'damage_claim') showToast(data.message, 'warning');
           });
+          notificationsInitialSnapshot = false;
         });
     }
 
