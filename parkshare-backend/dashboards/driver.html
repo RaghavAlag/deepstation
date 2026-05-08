@@ -41,6 +41,9 @@
     .modal { width: min(520px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
     .history-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 880; background: var(--surface); border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; max-height: 72vh; overflow: auto; padding: 14px; transform: translateY(110%); transition: transform .25s ease; }
     .history-panel.open { transform: translateY(0); }
+    .tow-banner { position: fixed; top: 64px; left: 0; right: 0; z-index: 999; background: #7b0000; color: #fff; text-align: center; padding: 10px; font-weight: 700; display: none; }
+    .tow-banner.show { display: block; }
+    .pill-option.active { border-color: var(--accent); background: rgba(0, 212, 255, 0.2); }
   </style>
 </head>
 <body>
@@ -64,6 +67,7 @@
   <section id="sheet" class="bottom-sheet"></section>
   <section id="activeBookingBar" class="active-booking"></section>
   <section id="historyPanel" class="history-panel"></section>
+  <section id="towBanner" class="tow-banner">🚨 TOW ALERT — Your vehicle has been flagged for removal. Return immediately.</section>
 
   <div id="bookingModalWrap" class="overlay">
     <div class="modal">
@@ -72,6 +76,12 @@
       <button id="confirmBookBtn" class="btn-primary" style="width:100%;">Confirm & Pay (Demo)</button>
       <p id="bookingError" style="color:var(--danger);margin-top:8px;"></p>
       <button id="closeModalBtn" class="btn-secondary" style="margin-top:8px;width:100%;">Cancel</button>
+    </div>
+  </div>
+  <div id="extensionModalWrap" class="overlay">
+    <div class="modal">
+      <div id="extensionModalContent"></div>
+      <button id="closeExtensionBtn" class="btn-secondary" style="margin-top:8px;width:100%;">Close</button>
     </div>
   </div>
 
@@ -91,12 +101,14 @@
       selectedHours: 1,
       selectedRate: 0,
       currentBooking: null,
-      spotMarkerStatus: {}
+      spotMarkerStatus: {},
+      overstayDetectedAt: null
     };
 
     document.getElementById('driverName').textContent = sessionStorage.getItem('name') || 'Driver';
     document.getElementById('driverPhoto').src = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
     document.getElementById('signOutBtn').onclick = () => { sessionStorage.clear(); window.location.href = './login.html'; };
+    document.getElementById('closeExtensionBtn').onclick = () => document.getElementById('extensionModalWrap').classList.remove('show');
 
     const haversineDistance = (lat1, lng1, lat2, lng2) => {
       const R = 6371;
@@ -327,7 +339,22 @@
         closeSheet();
         showActiveBookingBar();
       } catch (error) {
-        document.getElementById('bookingError').textContent = 'Booking failed. Please retry.';
+        const msg = String(error?.message || '');
+        if (msg.includes('already booked')) {
+          let endHint = '';
+          try {
+            const parsed = JSON.parse(msg);
+            if (parsed.conflictEndsAt) {
+              endHint = ` Available after ${new Date(parsed.conflictEndsAt).toLocaleTimeString()}.`;
+            }
+          } catch {
+            // keep default hint
+          }
+          document.getElementById('bookingError').textContent =
+            `This spot is already booked for that time.${endHint} Please choose another spot or duration.`;
+        } else {
+          document.getElementById('bookingError').textContent = 'Booking failed. Please retry.';
+        }
       } finally {
         btn.disabled = false;
         btn.textContent = 'Confirm & Pay (Demo)';
@@ -342,7 +369,107 @@
     }
 
     function openExtensionModal() {
-      alert('Extension flow will be wired in Phase 7.');
+      if (!state.currentBooking) return;
+      const modal = document.getElementById('extensionModalWrap');
+      const content = document.getElementById('extensionModalContent');
+      let chosenHours = 1;
+      const costPreview = () => Math.round((Number(state.currentBooking.baseRate || 0) * Number(state.currentBooking.aiSurgeMultiplier || 1) * chosenHours) || 0);
+
+      const renderRequestUI = () => {
+        content.innerHTML = `
+          <h3>Extend Your Parking</h3>
+          <div class="duration" style="margin-top:10px;">
+            <button class="btn-secondary pill-option active" data-h="1">+1 Hour</button>
+            <button class="btn-secondary pill-option" data-h="2">+2 Hours</button>
+            <button class="btn-secondary pill-option" data-h="3">+3 Hours</button>
+          </div>
+          <p class="muted" id="extCost">This will cost approximately ₹${costPreview()}</p>
+          <button id="requestExtBtn" class="btn-primary" style="width:100%;">Request Extension</button>
+          <p id="extError" style="color:var(--danger);margin-top:8px;"></p>
+        `;
+        content.querySelectorAll('.pill-option').forEach((btn) => {
+          btn.onclick = () => {
+            chosenHours = Number(btn.dataset.h);
+            content.querySelectorAll('.pill-option').forEach((el) => el.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('extCost').textContent = `This will cost approximately ₹${costPreview()}`;
+          };
+        });
+        document.getElementById('requestExtBtn').onclick = () => requestExtension(chosenHours);
+      };
+
+      const requestExtension = async (hours) => {
+        const btn = document.getElementById('requestExtBtn');
+        btn.disabled = true;
+        btn.textContent = 'Requesting...';
+        try {
+          const data = await json(`${apiBase}/extensions/request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookingId: state.currentBooking.bookingId, extensionHours: hours })
+          });
+          if (data.approved) {
+            state.currentBooking.endTime = data.newEndTime;
+            modal.classList.remove('show');
+            showToast(`Extension Approved! ₹${data.extensionCost} added. New end time: ${new Date(data.newEndTime).toLocaleTimeString()}`);
+            showActiveBookingBar();
+            return;
+          }
+
+          const conflict = data.conflictData;
+          content.innerHTML = `<p class="muted">Checking availability with next driver...</p><div class="skeleton" style="height:14px;margin-top:8px;"></div>`;
+          setTimeout(async () => {
+            content.innerHTML = `
+              <h3>Extension Request Under Review</h3>
+              <p style="color:var(--gold);font-weight:700;">₹${conflict.compensationAmount} offered to the next driver</p>
+              <p class="muted" style="font-style:italic;">${conflict.compensationReason}</p>
+              <div class="card" style="margin:8px 0;">${conflict.alternateSpotRecommendation}</div>
+              <span class="status-chip ${conflict.urgencyLevel === 'high' ? 'status-red' : conflict.urgencyLevel === 'medium' ? 'status-amber' : 'status-green'}">${conflict.urgencyLevel.toUpperCase()}</span>
+              <p class="muted" style="margin-top:8px;">${conflict.resolutionStrategy}</p>
+              <p id="conflictResult" class="muted" style="margin-top:10px;"></p>
+            `;
+            setTimeout(async () => {
+              const outcome = Math.random() < 0.7 ? 'accepted' : 'rejected';
+              await json(`${apiBase}/extensions/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conflictId: conflict.conflictId, outcome })
+              });
+              const resultNode = document.getElementById('conflictResult');
+              if (outcome === 'accepted') {
+                resultNode.style.color = 'var(--success)';
+                resultNode.textContent = 'Extension approved by next driver. Updated timer applied.';
+                const updated = await json(`${apiBase}/bookings/${state.currentBooking.bookingId}`);
+                state.currentBooking = updated.booking;
+                showActiveBookingBar();
+              } else {
+                resultNode.style.color = 'var(--danger)';
+                resultNode.textContent = 'Extension denied. Please vacate on time.';
+              }
+              setTimeout(() => modal.classList.remove('show'), 3000);
+            }, 5000);
+          }, 2000);
+        } catch (error) {
+          document.getElementById('extError').textContent = 'Could not process extension request.';
+          btn.disabled = false;
+          btn.textContent = 'Request Extension';
+        }
+      };
+
+      renderRequestUI();
+      modal.classList.add('show');
+    }
+
+    function showToast(message) {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      toast.style.position = 'fixed';
+      toast.style.right = '12px';
+      toast.style.bottom = '12px';
+      toast.style.zIndex = '1200';
+      setTimeout(() => toast.remove(), 3000);
     }
 
     function showActiveBookingBar() {
@@ -350,17 +477,30 @@
       if (!state.currentBooking) return;
       const b = state.currentBooking;
       const status = getStatusMeta(b);
+      const isOverstaying = b.status === 'overstaying';
+      if (isOverstaying && !state.overstayDetectedAt) {
+        state.overstayDetectedAt = Date.now();
+      }
+      if (!isOverstaying) {
+        state.overstayDetectedAt = null;
+      }
       const remainingSec = Math.max(0, Math.floor((new Date(b.endTime).getTime() - Date.now()) / 1000));
       const h = Math.floor(remainingSec / 3600);
       const m = Math.floor((remainingSec % 3600) / 60);
       const s = remainingSec % 60;
+      const graceRemaining = state.overstayDetectedAt
+        ? Math.max(0, 300 - Math.floor((Date.now() - state.overstayDetectedAt) / 1000))
+        : 300;
+      const penalty = Math.round(Number(b.baseRate || 0) * 1.5);
+      bar.style.background = isOverstaying ? '#3b0000' : 'var(--surface)';
       bar.innerHTML = `
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
           <div>
             <strong>${b.spotTitle || 'Spot'}</strong> • ${b.spotAddress || ''}
             <div class="muted">Time left: ${h}h ${m}m ${s}s</div>
+            ${isOverstaying ? `<div style="color:#ff8f8f;">Penalty accruing: ₹${penalty}/hr</div><div style="color:#ffb3b3;">Grace: ${Math.floor(graceRemaining/60)}m ${graceRemaining%60}s</div>` : ''}
           </div>
-          <span class="status-chip ${status.cls}">${status.text}</span>
+          <span class="status-chip ${isOverstaying ? 'status-red' : status.cls}">${isOverstaying ? '🚨 OVERSTAYING' : status.text}</span>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button id="extendBtn" class="btn-secondary">Extend ⏱</button>
@@ -376,6 +516,11 @@
         bar.classList.remove('show');
         state.currentBooking = null;
       };
+      if (isOverstaying && graceRemaining <= 0) {
+        document.getElementById('towBanner').classList.add('show');
+      } else {
+        document.getElementById('towBanner').classList.remove('show');
+      }
     }
 
     setInterval(async () => {
@@ -385,7 +530,9 @@
       state.currentBooking = result.booking;
       if (state.currentBooking.status === 'completed' || state.currentBooking.status === 'cancelled') {
         document.getElementById('activeBookingBar').classList.remove('show');
+        document.getElementById('towBanner').classList.remove('show');
         state.currentBooking = null;
+        state.overstayDetectedAt = null;
         return;
       }
       showActiveBookingBar();
@@ -474,6 +621,12 @@
 
     initMap();
     initLocationAndData();
+    json(`${apiBase}/bookings?driverId=${uid}&status=active,overstaying`).then((data) => {
+      if ((data.bookings || []).length) {
+        state.currentBooking = data.bookings[0];
+        showActiveBookingBar();
+      }
+    }).catch(() => {});
     setInterval(loadNearbySpots, 60000);
   </script>
 </body>
