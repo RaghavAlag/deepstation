@@ -4,40 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Owner Dashboard | ParkShare</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./assets/dashboard.css" />
-  <style>
-    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 64px); }
-    .sidebar { border-right: 1px solid var(--border); padding: 14px; background: #0d0d0d; }
-    .sidebar button, .mobile-tabs button { width: 100%; margin-bottom: 8px; }
-    .content { padding: 16px; }
-    .hidden { display: none !important; }
-    .nav-brand { font-family: var(--font-head); color: var(--accent); font-size: 1.6rem; }
-    .profile { display: flex; align-items: center; gap: 10px; }
-    .profile img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
-    .panel { display: none; }
-    .panel.active { display: block; }
-    .booking-card, .spot-card { margin-bottom: 10px; }
-    .muted { color: var(--muted); }
-    .pill-danger { color: #fff; background: rgba(255,68,68,0.16); border-color: var(--danger); }
-    .damage-section { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-    .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: .8rem; }
-    .progress { width: 100%; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
-    .progress > span { display: block; height: 100%; background: var(--accent); }
-    .mobile-tabs { display: none; position: fixed; bottom: 0; left: 0; right: 0; border-top: 1px solid var(--border); background: var(--surface); padding: 8px; gap: 8px; }
-    .table-form input, .table-form textarea, .table-form select { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #111; color: var(--text); }
-    .field { margin-bottom: 10px; }
-    .label { display:block; margin-bottom: 6px; color: var(--muted); }
-    .progress-item { margin: 6px 0; }
-    .badge-success { background: rgba(0,255,136,.15); border-color: var(--success); }
-    .badge-warning { background: rgba(255,170,0,.15); border-color: var(--warning); }
-    .badge-danger { background: rgba(255,68,68,.15); border-color: var(--danger); }
-    @media (max-width: 920px){ .layout{grid-template-columns:1fr;} .sidebar{display:none;} .mobile-tabs{display:flex;} .content{padding-bottom:80px;} }
-  </style>
 </head>
-<body>
-  <div id="serverBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1400;background:#ffaa00;color:#111;padding:10px;text-align:center;font-weight:700;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
+<body class="page page-owner">
+  <div id="serverBanner" class="banner-server" style="display:none;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
   <header class="navbar">
     <div class="nav-brand">ParkShare</div>
     <div class="profile">
@@ -47,29 +18,40 @@
       <button id="signOutBtn" class="btn-danger">Sign Out</button>
     </div>
   </header>
-  <section id="notifDropdown" class="card" style="display:none;position:fixed;top:68px;right:16px;z-index:1200;min-width:320px;max-width:420px;max-height:420px;overflow:auto;"></section>
+  <section id="notifDropdown" class="owner-notif-flyout" style="display:none;" aria-live="polite"></section>
   <div class="layout">
     <aside class="sidebar">
-      <button class="btn-secondary tab-btn" data-tab="active">Active Bookings</button>
-      <button class="btn-secondary tab-btn" data-tab="upcoming">Pre-Booked</button>
-      <button class="btn-secondary tab-btn" data-tab="history">History</button>
-      <button class="btn-secondary tab-btn" data-tab="spots">My Spots</button>
-      <button class="btn-primary tab-btn" data-tab="list">+ List Spot</button>
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon" aria-hidden="true">◆</div>
+        <div>
+          <div class="sidebar-brand-title">ParkShare</div>
+          <div class="sidebar-brand-sub muted">Owner console</div>
+        </div>
+      </div>
+      <div class="sidebar-label">Workspace</div>
+      <button class="btn-secondary tab-btn" data-tab="active">Live parking</button>
+      <button class="btn-secondary tab-btn" data-tab="upcoming">Pre-booked</button>
+      <button class="btn-secondary tab-btn" data-tab="history">History & claims</button>
+      <button class="btn-secondary tab-btn" data-tab="spots">My spots</button>
+      <div class="sidebar-spacer" aria-hidden="true"></div>
+      <button class="btn-primary tab-btn tab-btn-cta" data-tab="list">＋ New listing</button>
     </aside>
     <main class="content">
-      <section id="tab-active" class="panel active"></section>
-      <section id="tab-upcoming" class="panel"></section>
-      <section id="tab-history" class="panel"></section>
-      <section id="tab-spots" class="panel"></section>
-      <section id="tab-list" class="panel"></section>
+      <div class="owner-shell">
+        <section id="tab-active" class="panel active"></section>
+        <section id="tab-upcoming" class="panel"></section>
+        <section id="tab-history" class="panel"></section>
+        <section id="tab-spots" class="panel"></section>
+        <section id="tab-list" class="panel"></section>
+      </div>
     </main>
   </div>
   <nav class="mobile-tabs">
-    <button class="btn-secondary tab-btn" data-tab="active">Active</button>
-    <button class="btn-secondary tab-btn" data-tab="upcoming">Pre</button>
-    <button class="btn-secondary tab-btn" data-tab="history">History</button>
+    <button class="btn-secondary tab-btn" data-tab="active">Live</button>
+    <button class="btn-secondary tab-btn" data-tab="upcoming">Queue</button>
+    <button class="btn-secondary tab-btn" data-tab="history">Past</button>
     <button class="btn-secondary tab-btn" data-tab="spots">Spots</button>
-    <button class="btn-primary tab-btn" data-tab="list">List</button>
+    <button class="btn-primary tab-btn tab-btn-cta" data-tab="list">＋</button>
   </nav>
   <div class="toast-mini-wrap" id="toastWrap"></div>
 
@@ -108,8 +90,9 @@
     document.getElementById('notifBellBtn').addEventListener('click', (event) => {
       event.stopPropagation();
       const panel = document.getElementById('notifDropdown');
-      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-      if (panel.style.display === 'block') renderNotifDropdown();
+      const open = panel.style.display === 'flex';
+      panel.style.display = open ? 'none' : 'flex';
+      if (!open) renderNotifDropdown();
     });
     document.addEventListener('click', (event) => {
       const panel = document.getElementById('notifDropdown');
@@ -211,20 +194,22 @@
       const panel = document.getElementById('notifDropdown');
       const list = state.notifications.slice(0, 20);
       if (!list.length) {
-        panel.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">You\'re all caught up 🎉</div>';
+        panel.innerHTML = '<div class="owner-notif-empty">All caught up</div>';
         return;
       }
       panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <strong>Notifications</strong>
-          <button id="markAllReadBtn" class="btn-secondary">Mark all as read</button>
+        <div class="owner-notif-head">
+          <span class="owner-notif-title">Alerts</span>
+          <button type="button" id="markAllReadBtn" class="btn-secondary owner-notif-readall">Read all</button>
         </div>
+        <div class="owner-notif-list">
         ${list.map((n) => `
-          <article class="card notif-row" data-id="${n.id}" style="${n.read ? '' : 'border-left:4px solid #00d4ff;background:rgba(0,212,255,0.06);'} margin-bottom:6px;cursor:pointer;">
-            <div>${n.message || ''}</div>
-            <div class="muted" style="font-size:.8rem;margin-top:4px;">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
-          </article>
+          <button type="button" class="owner-notif-item ${n.read ? '' : 'owner-notif-item--new'}" data-id="${n.id}">
+            <span class="owner-notif-msg">${n.message || ''}</span>
+            <span class="owner-notif-time">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</span>
+          </button>
         `).join('')}
+        </div>
       `;
       const markAllBtn = document.getElementById('markAllReadBtn');
       if (markAllBtn) {
@@ -235,14 +220,14 @@
           renderNotifDropdown();
         };
       }
-      panel.querySelectorAll('.notif-row').forEach((row) => {
-        row.onclick = async () => {
+      panel.querySelectorAll('.owner-notif-item').forEach((row) => {
+        row.addEventListener('click', async () => {
           const id = row.dataset.id;
           await markNotifRead(id);
           state.notifications = state.notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
           updateNotifBadge();
           renderNotifDropdown();
-        };
+        });
       });
     }
 
@@ -277,6 +262,9 @@
       state.currentTab = tab;
       document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
       document.getElementById(`tab-${tab}`).classList.add('active');
+      document.querySelectorAll('.tab-btn').forEach((b) => {
+        b.classList.toggle('is-active-tab', b.dataset.tab === tab);
+      });
       loadTab(tab);
     }
     document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
@@ -297,18 +285,26 @@
       return 'badge-success';
     }
 
+    function historyStatusPillClass(status) {
+      if (status === 'completed') return 'owner-status-pill--ok';
+      if (status === 'cancelled') return 'owner-status-pill--bad';
+      return 'owner-status-pill--neutral';
+    }
+
     function renderActive(list) {
       const root = document.getElementById('tab-active');
       if (!list.length) return (root.innerHTML = '<div class="card muted">🅿️ No active bookings right now. Your spot is available!</div>');
       root.innerHTML = list.map((b) => `
-        <article class="card booking-card">
-          <div style="display:flex;justify-content:space-between;gap:10px;">
-            <div><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}</div>
-            ${b.status === 'overstaying' ? '<span class="badge pill-danger">OVERSTAYING</span>' : ''}
+        <article class="card booking-card owner-booking-card">
+          <div class="owner-booking-head">
+            <div><strong>${b.driverName || 'Driver'}</strong><span class="owner-booking-dot">·</span><span class="owner-booking-spot">${b.spotTitle || 'Spot'}</span></div>
+            ${b.status === 'overstaying' ? '<span class="badge pill-danger">Overstay</span>' : ''}
           </div>
-          <div class="muted" data-countdown="${b.bookingId}" data-end="${b.endTime}"></div>
-          <div>Amount: ₹${b.totalAmount || 0}</div>
-          <button class="btn-danger block-btn" data-spot="${b.spotId}" data-driver="${b.driverId}">Block Driver</button>
+          <div class="owner-booking-timer muted" data-countdown="${b.bookingId}" data-end="${b.endTime}"></div>
+          <div class="owner-booking-amount">₹${b.totalAmount || 0}</div>
+          <div class="owner-card-actions">
+            <button type="button" class="btn-danger owner-btn-block block-btn" data-spot="${b.spotId}" data-driver="${b.driverId}">Block driver</button>
+          </div>
         </article>`).join('');
       root.querySelectorAll('.block-btn').forEach((btn) => btn.addEventListener('click', async () => {
         try {
@@ -329,9 +325,11 @@
       const root = document.getElementById('tab-upcoming');
       if (!list.length) return (root.innerHTML = '<div class="card muted">📅 No upcoming bookings yet.</div>');
       root.innerHTML = list.sort((a,b)=>new Date(a.startTime)-new Date(b.startTime)).map((b) => `
-        <article class="card booking-card"><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}
-        <div class="muted">${new Date(b.startTime).toLocaleString()} → ${new Date(b.endTime).toLocaleString()}</div>
-        <div>Amount: ₹${b.totalAmount || 0}</div></article>`).join('');
+        <article class="card booking-card owner-booking-card">
+          <div class="owner-booking-head"><strong>${b.driverName || 'Driver'}</strong><span class="owner-booking-dot">·</span><span class="owner-booking-spot">${b.spotTitle || 'Spot'}</span></div>
+          <div class="muted owner-booking-window">${new Date(b.startTime).toLocaleString()} → ${new Date(b.endTime).toLocaleString()}</div>
+          <div class="owner-booking-amount">₹${b.totalAmount || 0}</div>
+        </article>`).join('');
     }
 
     function damageMarkup(b) {
@@ -354,20 +352,56 @@
           <div style="margin-top:8px;">📹 ${entryVideo}</div>
           <div>📹 ${exitVideo}</div>
           <p class="muted">${r.aiRemarks || 'No remarks available.'}</p>
-          <button class="btn-primary claim-btn" data-id="${b.bookingId}" data-decision="accepted">Accept Claim</button>
-          <button class="btn-danger claim-btn" data-id="${b.bookingId}" data-decision="rejected">Reject Claim</button>
+          <div class="owner-claim-actions">
+            <button type="button" class="btn-primary claim-btn" data-id="${b.bookingId}" data-decision="accepted">Accept</button>
+            <button type="button" class="btn-danger claim-btn" data-id="${b.bookingId}" data-decision="rejected">Reject</button>
+          </div>
         </div>`;
     }
 
     function renderHistory(list) {
       const root = document.getElementById('tab-history');
-      if (!list.length) return (root.innerHTML = '<div class="card muted">📚 No booking history yet. Share your spot to start earning!</div>');
-      root.innerHTML = list.map((b) => `
-        <article class="card booking-card">
-          <div><strong>${b.driverName || 'Driver'}</strong> • ${b.spotTitle || 'Spot'}</div>
-          <div class="muted">${new Date(b.endTime || Date.now()).toLocaleDateString()} • ${b.durationHours || 0}h</div>
-          <div>Earned: ₹${b.totalAmount || 0} <span class="badge">${b.status || ''}</span></div>
-          ${b.damageClaimStatus === 'pending' ? `<button class="btn-danger dmg-toggle" data-id="${b.bookingId}">Damage Claim</button><div id="dmg-${b.bookingId}" class="hidden">${damageMarkup(b)}</div>` : ''}
+      const completed = (list || []).filter((b) => b.status === 'completed');
+      const completedEarned = completed.reduce((s, b) => s + Number(b.totalAmount || 0), 0);
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEarned = completed
+        .filter((b) => new Date(b.endTime || b.startTime).getTime() >= monthStart.getTime())
+        .reduce((s, b) => s + Number(b.totalAmount || 0), 0);
+      const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString('en-IN') : '0');
+
+      const earningsStrip = `
+        <div class="owner-earnings-strip">
+          <div class="owner-earn-card">
+            <div class="owner-earn-label">Total earned</div>
+            <div class="owner-earn-value">₹${fmt(completedEarned)}</div>
+            <div class="owner-earn-sub">${completed.length} completed</div>
+          </div>
+          <div class="owner-earn-card">
+            <div class="owner-earn-label">This month</div>
+            <div class="owner-earn-value owner-earn-value--accent">₹${fmt(monthEarned)}</div>
+          </div>
+          <div class="owner-earn-card">
+            <div class="owner-earn-label">In history</div>
+            <div class="owner-earn-value owner-earn-value--dim">${list.length}</div>
+            <div class="owner-earn-sub">trips</div>
+          </div>
+        </div>`;
+
+      if (!list.length) {
+        root.innerHTML = `${earningsStrip}<div class="card owner-empty-card muted">No booking history yet. List a spot to start earning.</div>`;
+        return;
+      }
+
+      root.innerHTML = earningsStrip + list.map((b) => `
+        <article class="card booking-card owner-history-card">
+          <div class="owner-history-top">
+            <div><strong>${b.driverName || 'Driver'}</strong><span class="owner-booking-dot">·</span><span class="owner-booking-spot">${b.spotTitle || 'Spot'}</span></div>
+            <span class="owner-status-pill ${historyStatusPillClass(b.status)}">${b.status || ''}</span>
+          </div>
+          <div class="muted owner-history-meta">${new Date(b.endTime || Date.now()).toLocaleDateString()} · ${b.durationHours || 0}h</div>
+          <div class="owner-history-earn"><span class="owner-history-earn-label">You earned</span><span class="owner-history-earn-amt">₹${fmt(Number(b.totalAmount || 0))}</span></div>
+          ${b.damageClaimStatus === 'pending' ? `<button type="button" class="btn-secondary owner-dmg-toggle dmg-toggle" data-id="${b.bookingId}">Damage claim</button><div id="dmg-${b.bookingId}" class="hidden">${damageMarkup(b)}</div>` : ''}
         </article>`).join('');
       root.querySelectorAll('.dmg-toggle').forEach((btn) => btn.addEventListener('click', () => {
         document.getElementById(`dmg-${btn.dataset.id}`).classList.toggle('hidden');
@@ -389,35 +423,53 @@
 
     function spotFormHTML() {
       return `
-        <form id="spotForm" class="card table-form">
-          <div class="field"><label class="label">Title</label><input required name="title" /></div>
+        <form id="spotForm" class="card table-form owner-spot-form">
+          <div class="field"><label class="label">Title</label><input required name="title" placeholder="e.g. Covered slot near metro" /></div>
           <div class="field"><label class="label">Address</label><input required name="address" /></div>
-          <div class="field"><label class="label">Description</label><textarea name="description"></textarea></div>
+          <div class="field"><label class="label">Description</label><textarea name="description" rows="3"></textarea></div>
           <div class="grid grid-2">
             <div class="field"><label class="label">Latitude</label><input required type="number" step="any" name="latitude" /></div>
             <div class="field"><label class="label">Longitude</label><input required type="number" step="any" name="longitude" /></div>
           </div>
-          <div class="field"><label class="label">Vehicle Types</label>
-            <label><input type="checkbox" name="vehicleTypes" value="Car" /> Car</label>
-            <label><input type="checkbox" name="vehicleTypes" value="Bike" /> Bike</label>
-            <label><input type="checkbox" name="vehicleTypes" value="Truck" /> Truck</label>
+          <div class="field">
+            <label class="label">Vehicle types</label>
+            <div class="owner-pill-row" role="group" aria-label="Vehicle types">
+              <label class="owner-chip-check"><input type="checkbox" name="vehicleTypes" value="Car" /><span>Car</span></label>
+              <label class="owner-chip-check"><input type="checkbox" name="vehicleTypes" value="Bike" /><span>Bike</span></label>
+              <label class="owner-chip-check"><input type="checkbox" name="vehicleTypes" value="Truck" /><span>Truck</span></label>
+            </div>
           </div>
-          <div class="grid grid-3">
-            <label><input type="checkbox" name="isCovered" /> Covered parking</label>
-            <label><input type="checkbox" name="hasEVCharging" /> EV Charging</label>
-            <label><input type="checkbox" name="hasCCTV" /> CCTV</label>
+          <div class="field">
+            <label class="label">Amenities</label>
+            <div class="owner-pill-row owner-pill-row--wrap">
+              <label class="owner-chip-check"><input type="checkbox" name="isCovered" /><span>Covered</span></label>
+              <label class="owner-chip-check"><input type="checkbox" name="hasEVCharging" /><span>EV charge</span></label>
+              <label class="owner-chip-check"><input type="checkbox" name="hasCCTV" /><span>CCTV</span></label>
+            </div>
           </div>
           <div class="grid grid-2">
-            <div class="field"><label class="label">Hourly Rate (₹)</label><input required type="number" name="baseHourlyRate" /></div>
-            <div class="field"><label class="label">Daily Rate (₹)</label><input required type="number" name="baseDailyRate" /></div>
+            <div class="field"><label class="label">Hourly (₹)</label><input required type="number" name="baseHourlyRate" min="0" /></div>
+            <div class="field"><label class="label">Daily (₹)</label><input required type="number" name="baseDailyRate" min="0" /></div>
           </div>
-          <div class="grid grid-2">
-            <div class="field"><label class="label">Available From</label><input required type="time" name="availableFrom" /></div>
-            <div class="field"><label class="label">Available To</label><input required type="time" name="availableTo" /></div>
+          <div class="owner-time-grid grid grid-2">
+            <div class="field">
+              <label class="label">Opens</label>
+              <div class="owner-time-shell">
+                <input required type="time" name="availableFrom" class="owner-time-input" />
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Closes</label>
+              <div class="owner-time-shell">
+                <input required type="time" name="availableTo" class="owner-time-input" />
+              </div>
+            </div>
           </div>
-          <div class="field"><label class="label">Images (max 5)</label><input id="spotImages" type="file" accept="image/*" multiple /></div>
+          <div class="field"><label class="label">Photos (max 5)</label><input id="spotImages" type="file" accept="image/*" multiple /></div>
           <div id="uploadProgress"></div>
-          <button class="btn-primary" type="submit">${state.editingSpotId ? 'Save Changes' : 'List Spot'}</button>
+          <div class="owner-form-actions">
+            <button class="btn-primary owner-form-submit" type="submit">${state.editingSpotId ? 'Save spot' : 'Publish listing'}</button>
+          </div>
         </form>`;
     }
 
@@ -466,14 +518,21 @@
         return;
       }
       root.innerHTML = list.map((s) => `
-        <article class="card spot-card">
-          <div><strong>${s.title}</strong></div>
-          <div class="muted">${s.address}</div>
-          <div>₹${s.baseHourlyRate || 0}/hour • <span class="badge">${s.isActive ? 'Active' : 'Inactive'}</span></div>
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="toggle-switch ${s.isActive ? 'active' : ''}" data-toggle="${s.spotId}" title="Toggle active"></button>
-            <button class="btn-secondary edit-spot" data-id="${s.spotId}">Edit</button>
-            <button class="btn-danger del-spot" data-id="${s.spotId}">Delete</button>
+        <article class="card spot-card owner-spot-card">
+          <div class="owner-spot-head">
+            <div>
+              <div><strong>${s.title}</strong></div>
+              <div class="muted owner-spot-addr">${s.address}</div>
+            </div>
+            <span class="owner-spot-live ${s.isActive ? 'owner-spot-live--on' : ''}">${s.isActive ? 'Live' : 'Off'}</span>
+          </div>
+          <div class="owner-spot-rate">₹${s.baseHourlyRate || 0}<span class="owner-spot-rate-unit">/hr</span></div>
+          <div class="owner-spot-toolbar">
+            <button type="button" class="toggle-switch ${s.isActive ? 'active' : ''}" data-toggle="${s.spotId}" title="Toggle listing"></button>
+            <div class="owner-spot-btns">
+              <button type="button" class="btn-secondary edit-spot" data-id="${s.spotId}">Edit</button>
+              <button type="button" class="btn-danger del-spot owner-btn-ghost-danger" data-id="${s.spotId}">Remove</button>
+            </div>
           </div>
         </article>`).join('');
       root.querySelectorAll('[data-toggle]').forEach((t) => t.addEventListener('click', async () => {
@@ -523,7 +582,7 @@
         e.preventDefault();
         const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.textContent = state.editingSpotId ? 'Saving...' : 'Listing...';
+        submitBtn.textContent = state.editingSpotId ? 'Saving…' : 'Publishing…';
         try {
           const fd = new FormData(form);
           const files = Array.from(document.getElementById('spotImages').files || []);
@@ -565,7 +624,7 @@
           showToast(`Could not save spot${code}. ${error?.message || ''}`.trim());
         } finally {
           submitBtn.disabled = false;
-          submitBtn.textContent = state.editingSpotId ? 'Save Changes' : 'List Spot';
+          submitBtn.textContent = state.editingSpotId ? 'Save spot' : 'Publish listing';
         }
       });
     }
@@ -611,7 +670,7 @@
     setInterval(() => { if (state.currentTab === 'history') loadHistory(); }, 15000);
     verifySessionOnLoad();
     setupNotificationListener();
-    loadTab('active');
+    setTab('active');
   </script>
 </body>
 </html>

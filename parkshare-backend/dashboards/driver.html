@@ -4,69 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Driver Dashboard | ParkShare</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./assets/dashboard.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <style>
-    #map { height: calc(100vh - 64px); }
-    .nav-brand { font-family: var(--font-head); color: var(--accent); font-size: 1.6rem; }
-    .profile { display: flex; align-items: center; gap: 10px; }
-    .profile img { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); }
-    .floating-search { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 800; width: min(640px, calc(100vw - 24px)); }
-    .search-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
-    .search-box input { width: 100%; background: transparent; border: 0; color: var(--text); outline: none; }
-    .suggestions { margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .suggestion { padding: 10px; cursor: pointer; border-top: 1px solid var(--border); }
-    .suggestion:first-child { border-top: 0; }
-    .suggestion:hover { background: rgba(255,255,255,.04); }
-    .bottom-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 850; background: var(--surface); border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; padding: 16px; transform: translateY(110%); transition: transform .25s ease; max-height: 70vh; overflow: auto; }
-    .bottom-sheet.open { transform: translateY(0); }
-    .sheet-photos { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 8px; }
-    .sheet-photos img { width: 160px; height: 110px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-    .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; font-size: .78rem; }
-    .duration { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-    .duration button { min-width: 58px; }
-    .active-booking { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 860; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px; display: none; }
-    .active-booking.show { display: block; }
-    .status-chip { border-radius: 999px; padding: 3px 9px; font-size: .75rem; border: 1px solid transparent; }
-    .status-green { background: rgba(0,255,136,.15); border-color: var(--success); }
-    .status-amber { background: rgba(255,170,0,.16); border-color: var(--warning); }
-    .status-red { background: rgba(255,68,68,.16); border-color: var(--danger); }
-    .marker-wrap { text-align: center; transform: translate(-50%, -100%); }
-    .marker-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; margin: 0 auto 3px; box-shadow: 0 0 10px rgba(0,0,0,.3); }
-    .price-pill { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; font-size: .72rem; white-space: nowrap; }
-    .overlay { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.56); display: none; align-items: center; justify-content: center; padding: 20px; }
-    .overlay.show { display: flex; }
-    .modal { width: min(520px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
-    .history-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 880; background: var(--surface); border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; max-height: 72vh; overflow: auto; padding: 14px; transform: translateY(110%); transition: transform .25s ease; }
-    .history-panel.open { transform: translateY(0); }
-    .tow-banner { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 999; background: rgba(90, 0, 0, 0.94); color: #fff; text-align: center; padding: 6px 14px; font-weight: 600; font-size: 11px; max-width: min(520px, calc(100vw - 24px)); border-radius: 0 0 10px 10px; border: 1px solid rgba(255,255,255,.12); border-top: none; display: none; line-height: 1.35; }
-    .tow-banner.show { display: block; }
-    .pill-option.active { border-color: var(--accent); background: rgba(0, 212, 255, 0.2); }
-    .map-load-wrap {
-      display: none;
-      position: fixed;
-      bottom: 88px;
-      left: 50%;
-      margin-left: -14px;
-      z-index: 750;
-      pointer-events: none;
-    }
-    .map-load-spin {
-      width: 28px;
-      height: 28px;
-      border: 3px solid rgba(255, 255, 255, 0.12);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: map-spin 0.65s linear infinite;
-    }
-    @keyframes map-spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
 </head>
-<body>
+<body class="page page-driver">
   <header class="navbar">
     <div class="nav-brand">ParkShare</div>
     <div class="profile">
@@ -77,13 +19,13 @@
       <button id="signOutBtn" class="btn-danger">Sign Out</button>
     </div>
   </header>
-  <section id="notifDropdown" class="card" style="display:none;position:fixed;top:68px;right:16px;z-index:1200;min-width:320px;max-width:420px;max-height:420px;overflow:auto;"></section>
+  <section id="notifDropdown" class="card notif-flyout" style="display:none;"></section>
 
   <div id="map"></div>
-  <div id="serverBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:1400;background:#ffaa00;color:#111;padding:10px;text-align:center;font-weight:700;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
+  <div id="serverBanner" class="banner-server" style="display:none;">⚠️ Could not connect to server. Please check your connection or try refreshing.</div>
   <div id="mapLoadingOverlay" class="map-load-wrap" aria-hidden="true"><div class="map-load-spin"></div></div>
   <div class="floating-search">
-    <div class="search-box"><span>🔍</span><input id="searchInput" placeholder="Search location..." /></div>
+    <div class="search-box"><span aria-hidden="true">🔍</span><input id="searchInput" type="text" inputmode="search" name="driver_location_search" placeholder="Search location..." enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" /></div>
     <div id="suggestions" class="suggestions" style="display:none;"></div>
   </div>
 
@@ -183,6 +125,11 @@
     document.getElementById('closeExtensionBtn').onclick = () => document.getElementById('extensionModalWrap').classList.remove('show');
     document.getElementById('notifBellBtn').onclick = (e) => {
       e.stopPropagation();
+      const hist = document.getElementById('historyPanel');
+      if (hist.classList.contains('open')) {
+        hist.classList.remove('open');
+        hist.innerHTML = '';
+      }
       const panel = document.getElementById('notifDropdown');
       panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
       if (panel.style.display === 'block') renderNotifDropdown();
@@ -192,6 +139,12 @@
       const bell = document.getElementById('notifBellBtn');
       if (!panel.contains(e.target) && !bell.contains(e.target)) {
         panel.style.display = 'none';
+      }
+      const hist = document.getElementById('historyPanel');
+      const histBtn = document.getElementById('historyBtn');
+      if (hist.classList.contains('open') && !hist.contains(e.target) && !histBtn.contains(e.target)) {
+        hist.classList.remove('open');
+        hist.innerHTML = '';
       }
     });
 
@@ -291,22 +244,40 @@
       }
     }
 
+    const DRIVER_HIDDEN_HISTORY_KEY = 'parkshare_driver_hidden_bookings';
+
+    function bookingKey(b) {
+      return String(b.bookingId || b.id || '');
+    }
+
+    function getHiddenHistoryIds() {
+      try {
+        return new Set(JSON.parse(localStorage.getItem(DRIVER_HIDDEN_HISTORY_KEY) || '[]').filter(Boolean));
+      } catch {
+        return new Set();
+      }
+    }
+
+    function saveHiddenHistoryIds(set) {
+      localStorage.setItem(DRIVER_HIDDEN_HISTORY_KEY, JSON.stringify([...set]));
+    }
+
     function renderNotifDropdown() {
       const panel = document.getElementById('notifDropdown');
       const list = state.notifications.slice(0, 20);
       if (!list.length) {
-        panel.innerHTML = '<div class="muted" style="text-align:center;padding:16px;">You\'re all caught up 🎉</div>';
+        panel.innerHTML = '<div class="notif-empty">You\'re all caught up 🎉</div>';
         return;
       }
       panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <strong>Notifications</strong>
-          <button id="markAllReadBtn" class="btn-secondary">Mark all as read</button>
+        <div class="notif-dropdown-head">
+          <strong class="notif-dropdown-title">Notifications</strong>
+          <button id="markAllReadBtn" class="btn-secondary notif-toolbar-btn">Mark all read</button>
         </div>
         ${list.map((n) => `
-          <article class="card notif-row" data-id="${n.id}" style="${n.read ? '' : 'border-left:4px solid #00d4ff;background:rgba(0,212,255,0.06);'} margin-bottom:6px;cursor:pointer;">
-            <div>${n.message || ''}</div>
-            <div class="muted" style="font-size:.8rem;margin-top:4px;">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
+          <article class="card notif-row" data-id="${n.id}" style="${n.read ? '' : 'border-left:4px solid #00d4ff;background:rgba(0,212,255,0.12);'} margin-bottom:6px;cursor:pointer;">
+            <div class="notif-msg">${n.message || ''}</div>
+            <div class="notif-time">${relativeTime(n.createdAt?.toDate ? n.createdAt.toDate() : n.createdAt)}</div>
           </article>
         `).join('')}
       `;
@@ -553,7 +524,7 @@
     }
 
     function initMap() {
-      state.map = L.map('map').setView([state.userPos.lat, state.userPos.lng], 13);
+      state.map = L.map('map', { fadeAnimation: false }).setView([state.userPos.lat, state.userPos.lng], 13, { animate: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(state.map);
       L.circleMarker([state.userPos.lat, state.userPos.lng], { radius: 7, color: '#00d4ff' }).addTo(state.map);
     }
@@ -636,22 +607,22 @@
       const base = Number(baseRate || 0);
       if (!aiSection) return;
       if (!ai) {
-        aiSection.innerHTML = `<div class="muted">AI unavailable - base rate: ₹${base}/hr</div>`;
+        aiSection.innerHTML = `<div class="muted sheet-ai-fallback"><span class="sheet-ai-rate-small">₹${base}</span>/hr · map rate</div>`;
         state.selectedRate = base;
         updateTotal();
         return;
       }
       state.selectedRate = Number(ai.finalPrice) || base;
       aiSection.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-          <div>
-            <div style="font-size:1.5rem;color:var(--accent);font-weight:700;">₹${state.selectedRate}/hr</div>
-            ${state.selectedRate !== base ? `<div class="muted"><s>₹${base}/hr</s></div>` : ''}
+        <div class="sheet-ai-row">
+          <div class="sheet-ai-rate-block">
+            <div class="sheet-ai-rate">₹${state.selectedRate}<span class="sheet-ai-unit">/hr</span></div>
+            ${state.selectedRate !== base ? `<div class="muted sheet-ai-struck"><s>₹${base}/hr</s> base</div>` : ''}
           </div>
           <span class="status-chip ${demandBadgeClass(ai.demandLevel)}">${(ai.demandLevel || 'medium').replace('_', ' ').toUpperCase()}</span>
         </div>
-        <div class="muted" style="font-style:italic;margin-top:6px;">${ai.reasoning || 'AI pricing unavailable - showing base rate'}</div>
-        <div class="muted" style="font-size:.72rem;margin-top:4px;">✨ AI Suggested</div>
+        <p class="muted sheet-ai-reason">${ai.reasoning || 'AI pricing unavailable - showing base rate'}</p>
+        <span class="sheet-ai-badge">✨ Dynamic pricing</span>
       `;
       updateTotal();
     }
@@ -662,41 +633,61 @@
       state.selectedRate = Number(spot.baseHourlyRate || 0);
       const distance = haversineDistance(state.userPos.lat, state.userPos.lng, Number(spot.latitude), Number(spot.longitude)).toFixed(1);
       const images = (spot.images || []).length ? spot.images : ['https://via.placeholder.com/320x180?text=No+Image'];
+      const mainPhoto = images[0];
+      const extraPhotos = images.slice(1);
       const features = [
         spot.isCovered ? '<span class="chip">Covered</span>' : '',
-        spot.hasEVCharging ? '<span class="chip">EV Charging</span>' : '',
+        spot.hasEVCharging ? '<span class="chip">EV</span>' : '',
         spot.hasCCTV ? '<span class="chip">CCTV</span>' : ''
-      ].join('');
+      ].filter(Boolean).join('');
       const vehicleTags = (spot.vehicleTypes || []).map((v) => `<span class="chip">${v}</span>`).join('');
+      const tagHtml = [features, vehicleTags].filter(Boolean).join('');
       const sheet = document.getElementById('sheet');
       sheet.innerHTML = `
-        <div class="sheet-photos">${images.map((img) => `<img src="${img}" alt="spot image" />`).join('')}</div>
-        <h2 style="font-family:var(--font-head);">${spot.title || 'Parking Spot'}</h2>
-        <p class="muted">${spot.address || ''}</p>
-        <div class="chips">${features}</div>
-        <div class="chips">${vehicleTags}</div>
-        <p>Distance: ${distance} km</p>
-        <p>Available: ${spot.availableFrom || '--:--'} to ${spot.availableTo || '--:--'}</p>
-        <div id="ai-price-section" class="card" style="margin:8px 0;">
-          <div class="skeleton" style="height:22px;margin-bottom:8px;"></div>
-          <div class="skeleton" style="height:16px;width:65%;"></div>
-          <div class="muted" style="margin-top:8px;">Calculating AI price...</div>
-        </div>
-        <div class="duration">
-          <button class="btn-secondary dur" data-h="1">1h</button>
-          <button class="btn-secondary dur" data-h="2">2h</button>
-          <button class="btn-secondary dur" data-h="3">3h</button>
-          <button class="btn-secondary" id="customBtn">Custom</button>
-          <div id="customDurationWrap" style="display:none;gap:8px;align-items:center;">
-            <input id="customHours" type="number" min="0" value="0" style="width:80px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
-            <span class="muted">h</span>
-            <input id="customMinutes" type="number" min="0" max="59" value="30" style="width:80px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
-            <span class="muted">m</span>
+        <div class="sheet-body">
+          <div class="sheet-hero">
+            <div class="sheet-hero-photo">
+              <img src="${mainPhoto}" alt="" loading="lazy" class="sheet-hero-img" />
+              ${extraPhotos.length ? `<div class="sheet-hero-extra">${extraPhotos.slice(0, 4).map((img) => `<img src="${img}" alt="" loading="lazy" />`).join('')}${extraPhotos.length > 4 ? `<span class="sheet-more-photos">+${extraPhotos.length - 4}</span>` : ''}</div>` : ''}
+            </div>
+            <div class="sheet-hero-copy">
+              <h2 class="sheet-title">${spot.title || 'Parking Spot'}</h2>
+              <p class="sheet-address muted">${spot.address || ''}</p>
+              <div class="sheet-meta">
+                <span class="sheet-pill">${distance} km</span>
+                <span class="sheet-pill sheet-pill--time">${spot.availableFrom || '--:--'} – ${spot.availableTo || '--:--'}</span>
+              </div>
+            </div>
+          </div>
+          ${tagHtml ? `<div class="sheet-tags chips">${tagHtml}</div>` : ''}
+          <div id="ai-price-section" class="card sheet-ai-card">
+            <div class="skeleton sheet-sk"></div>
+            <div class="skeleton sheet-sk sheet-sk-narrow"></div>
+            <p class="muted sheet-ai-loading">Tuning price to demand…</p>
+          </div>
+          <div class="sheet-duration-block">
+            <p class="sheet-section-label">Stay duration</p>
+            <div class="duration">
+              <button type="button" class="btn-secondary dur" data-h="1">1h</button>
+              <button type="button" class="btn-secondary dur" data-h="2">2h</button>
+              <button type="button" class="btn-secondary dur" data-h="3">3h</button>
+              <button type="button" class="btn-secondary" id="customBtn">Custom</button>
+            </div>
+            <div id="customDurationWrap" class="sheet-custom-row" style="display:none;">
+              <input id="customHours" class="sheet-input" type="number" min="0" value="0" />
+              <span class="muted sheet-input-hint">h</span>
+              <input id="customMinutes" class="sheet-input" type="number" min="0" max="59" value="30" />
+              <span class="muted sheet-input-hint">m</span>
+            </div>
           </div>
         </div>
-        <p id="totalPrice">Total: ₹${(spot.baseHourlyRate || 0) * state.selectedHours}</p>
-        <button id="bookNowBtn" class="btn-primary" style="width:100%;">Book Now</button>
-        <button id="closeSheetBtn" class="btn-secondary" style="width:100%;margin-top:8px;">Close</button>
+        <footer class="sheet-footer">
+          <p id="totalPrice" class="sheet-total"><span class="sheet-total-prefix">Total</span><span class="sheet-total-value">₹${(spot.baseHourlyRate || 0) * state.selectedHours}</span></p>
+          <div class="sheet-actions">
+            <button type="button" id="closeSheetBtn" class="btn-secondary sheet-btn-quiet">Dismiss</button>
+            <button type="button" id="bookNowBtn" class="btn-primary sheet-btn-main">Reserve</button>
+          </div>
+        </footer>
       `;
       sheet.classList.add('open');
       sheet.querySelectorAll('.dur').forEach((btn) => btn.onclick = () => {
@@ -733,7 +724,8 @@
 
     function updateTotal() {
       const total = (state.selectedRate || state.selectedSpot.baseHourlyRate || 0) * state.selectedHours;
-      document.getElementById('totalPrice').textContent = `Total: ₹${total}`;
+      const el = document.getElementById('totalPrice');
+      if (el) el.innerHTML = `<span class="sheet-total-prefix">Total</span><span class="sheet-total-value">₹${total}</span>`;
     }
 
     function closeSheet() { document.getElementById('sheet').classList.remove('open'); }
@@ -906,9 +898,15 @@
             body: JSON.stringify({ bookingId: state.currentBooking.bookingId, extensionHours: hours })
           });
           if (data.approved) {
-            state.currentBooking.endTime = data.newEndTime;
             modal.classList.remove('show');
-            showToast(`Extension Approved! ₹${data.extensionCost} added. New end time: ${new Date(data.newEndTime).toLocaleTimeString()}`);
+            const updated = await json(`${apiBase}/bookings/${state.currentBooking.bookingId}`);
+            state.currentBooking = updated.booking;
+            const total = updated.booking?.totalAmount;
+            showToast(
+              `Extension approved. +₹${data.extensionCost}${total != null ? ` · Session total ₹${Number(total).toFixed(0)}` : ''}. Ends ${new Date(data.newEndTime).toLocaleString()}.`,
+              'success'
+            );
+            document.getElementById('towBanner').classList.remove('show');
             showActiveBookingBar();
             return;
           }
@@ -966,26 +964,38 @@
       const endMs = parseBookingInstantMs(b.endTime);
       const nowMs = Date.now();
       const isUpcomingWindow = isBookingFutureReservation(b, nowMs);
-      const isOverstaying = b.status === 'overstaying';
+      const isPastEnd = Number.isFinite(endMs) && nowMs > endMs;
+      const inOverstayStatus = b.status === 'overstaying';
+      const showGraceUi = inOverstayStatus && isPastEnd;
       const remainingSec = isUpcomingWindow ? Math.max(0, Math.floor((endMs - startMs) / 1000)) : Math.max(0, Math.floor((endMs - nowMs) / 1000));
       const h = Math.floor(remainingSec / 3600);
       const m = Math.floor((remainingSec % 3600) / 60);
       const s = remainingSec % 60;
       const overdueSeconds = Math.max(0, Math.floor((nowMs - endMs) / 1000));
-      const graceRemaining = isOverstaying ? Math.max(0, 300 - overdueSeconds) : 300;
+      const graceRemaining = showGraceUi ? Math.max(0, 300 - overdueSeconds) : 0;
       const penalty = Math.round(Number(b.baseRate || 0) * 1.5);
-      bar.style.background = isOverstaying ? '#3b0000' : 'var(--surface)';
+      const sessionTotal = Number(b.totalAmount);
+      const sessionTotalLine = Number.isFinite(sessionTotal) && sessionTotal > 0
+        ? `<div class="muted">Session total (incl. extensions): ₹${sessionTotal.toFixed(0)}</div>`
+        : '';
+      bar.style.background = showGraceUi ? '#3b0000' : 'var(--surface)';
+      const mainTimeLine = isUpcomingWindow
+        ? `<div class="muted">Parking allowed after: ${new Date(startMs).toLocaleString()}</div>
+           <div class="muted">Booked duration: ${h}h ${m}m ${s}s</div>`
+        : showGraceUi
+          ? `<div class="muted">Past your booked end — extend or end booking to avoid tow.</div>`
+          : `<div class="muted">Time left: ${h}h ${m}m ${s}s</div>`;
+      const chipLabel = showGraceUi ? '🚨 OVERSTAYING' : (isUpcomingWindow ? 'UPCOMING' : status.text);
+      const chipClass = showGraceUi ? 'status-red' : (isUpcomingWindow ? 'status-amber' : status.cls);
       bar.innerHTML = `
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
           <div>
             <strong>${b.spotTitle || 'Spot'}</strong> • ${b.spotAddress || ''}
-            ${isUpcomingWindow
-              ? `<div class="muted">Parking allowed after: ${new Date(startMs).toLocaleString()}</div>
-                 <div class="muted">Booked duration: ${h}h ${m}m ${s}s</div>`
-              : `<div class="muted">Time left: ${h}h ${m}m ${s}s</div>`}
-            ${isOverstaying ? `<div style="color:#ff8f8f;">Penalty accruing: ₹${penalty}/hr</div><div style="color:#ffb3b3;">Grace: ${Math.floor(graceRemaining/60)}m ${graceRemaining%60}s</div>` : ''}
+            ${mainTimeLine}
+            ${sessionTotalLine}
+            ${showGraceUi ? `<div style="color:#ff8f8f;">Penalty accruing: ₹${penalty}/hr</div><div style="color:#ffb3b3;">Grace before tow: ${Math.floor(graceRemaining / 60)}m ${graceRemaining % 60}s</div>` : ''}
           </div>
-          <span class="status-chip ${isOverstaying ? 'status-red' : (isUpcomingWindow ? 'status-amber' : status.cls)}">${isOverstaying ? '🚨 OVERSTAYING' : (isUpcomingWindow ? 'UPCOMING' : status.text)}</span>
+          <span class="status-chip ${chipClass}">${chipLabel}</span>
         </div>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button id="extendBtn" class="btn-secondary">Extend ⏱</button>
@@ -1036,7 +1046,7 @@
           }
         }, 9000);
       };
-      if (isOverstaying && graceRemaining <= 0) {
+      if (showGraceUi && graceRemaining <= 0) {
         document.getElementById('towBanner').classList.add('show');
       } else {
         document.getElementById('towBanner').classList.remove('show');
@@ -1074,35 +1084,90 @@
       return '';
     }
 
-    document.getElementById('historyBtn').onclick = async () => {
+    let lastDriverHistoryBookings = [];
+
+    function mountHistoryControls(panel, bookings) {
+      const hidden = getHiddenHistoryIds();
+      const visible = bookings.filter((b) => {
+        const k = bookingKey(b);
+        return k && !hidden.has(k);
+      });
+      const listHtml = visible.length
+        ? visible
+            .map(
+              (b) => `
+          <article class="card history-pop-row">
+            <div class="history-pop-spot"><strong>${b.spotTitle || 'Spot'}</strong></div>
+            <div class="history-pop-meta">${new Date(b.startTime).toLocaleString()} · ${b.durationHours || 0}h</div>
+            <div class="history-pop-total">₹${b.totalAmount || 0} <span class="status-chip ${statusChipClass(b.status)}">${b.status || ''}</span></div>
+          </article>
+        `
+            )
+            .join('')
+        : bookings.length > 0
+          ? `
+          <div class="history-pop-empty-msg">History is hidden on this device.</div>
+          <button type="button" id="restoreHistoryBtn" class="btn-secondary history-pop-restore">Show history again</button>
+        `
+          : `
+          <div class="history-pop-empty-msg">No past bookings yet. Completed and cancelled trips appear here.</div>
+        `;
+
+      panel.innerHTML = `
+        <div class="history-pop-inner">
+          <div class="history-pop-head">
+            <h3 class="history-pop-title">History</h3>
+            <button type="button" id="closeHistory" class="btn-secondary history-pop-close" aria-label="Close">✕</button>
+          </div>
+          <div class="history-pop-scroll">${listHtml}</div>
+          <div class="history-pop-actions">
+            <button type="button" id="clearHistoryBtn" class="btn-secondary" ${visible.length === 0 ? 'disabled' : ''}>Clear history</button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('closeHistory').onclick = () => {
+        panel.classList.remove('open');
+        panel.innerHTML = '';
+      };
+      const clearBtn = document.getElementById('clearHistoryBtn');
+      if (clearBtn && !clearBtn.disabled) {
+        clearBtn.onclick = () => {
+          const merged = getHiddenHistoryIds();
+          visible.forEach((b) => {
+            const k = bookingKey(b);
+            if (k) merged.add(k);
+          });
+          saveHiddenHistoryIds(merged);
+          showToast('History cleared on this device.');
+          mountHistoryControls(panel, lastDriverHistoryBookings);
+        };
+      }
+      const restoreBtn = document.getElementById('restoreHistoryBtn');
+      if (restoreBtn) {
+        restoreBtn.onclick = () => {
+          localStorage.removeItem(DRIVER_HIDDEN_HISTORY_KEY);
+          showToast('History restored.');
+          mountHistoryControls(panel, lastDriverHistoryBookings);
+        };
+      }
+    }
+
+    document.getElementById('historyBtn').onclick = async (e) => {
+      e.stopPropagation();
       const panel = document.getElementById('historyPanel');
       if (panel.classList.contains('open')) {
         panel.classList.remove('open');
         panel.innerHTML = '';
         return;
       }
+      document.getElementById('notifDropdown').style.display = 'none';
       const data = await json(`${apiBase}/bookings?driverId=${uid}&status=completed,cancelled`).catch(() => ({ bookings: [] }));
-      const bookings = [...(data.bookings || [])].sort(
+      lastDriverHistoryBookings = [...(data.bookings || [])].sort(
         (a, b) => new Date(b.endTime || b.startTime).getTime() - new Date(a.endTime || a.startTime).getTime()
       );
-      panel.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <h3>Booking History</h3>
-          <button id="closeHistory" class="btn-secondary">Close</button>
-        </div>
-        ${bookings.map((b) => `
-          <article class="card" style="margin-top:8px;">
-            <div><strong>${b.spotTitle || 'Spot'}</strong></div>
-            <div class="muted">${new Date(b.startTime).toLocaleString()} • ${b.durationHours || 0}h</div>
-            <div>₹${b.totalAmount || 0} <span class="status-chip ${statusChipClass(b.status)}">${b.status || ''}</span></div>
-          </article>
-        `).join('') || '<p class="muted">🧾 No past bookings yet. Completed and cancelled bookings show here.</p>'}
-      `;
+      mountHistoryControls(panel, lastDriverHistoryBookings);
       panel.classList.add('open');
-      document.getElementById('closeHistory').onclick = () => {
-        panel.classList.remove('open');
-        panel.innerHTML = '';
-      };
     };
 
     const suggestions = document.getElementById('suggestions');
@@ -1126,7 +1191,7 @@
           const lat = Number(entry.dataset.lat);
           const lng = Number(entry.dataset.lng);
           state.userPos = { lat, lng };
-          state.map.flyTo([lat, lng], 15);
+          state.map.setView([lat, lng], 15, { animate: false });
           suggestions.style.display = 'none';
           await loadNearbySpots();
         });
@@ -1148,10 +1213,10 @@
     function initLocationAndData() {
       navigator.geolocation.getCurrentPosition(async (pos) => {
         state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        state.map.setView([state.userPos.lat, state.userPos.lng], 13);
+        state.map.setView([state.userPos.lat, state.userPos.lng], 13, { animate: false });
         await loadNearbySpots();
       }, async () => {
-        state.map.setView([18.9667, 72.8333], 13);
+        state.map.setView([18.9667, 72.8333], 13, { animate: false });
         await loadNearbySpots();
       });
     }

@@ -1,6 +1,6 @@
 const express = require('express');
 const { randomUUID } = require('crypto');
-const { db } = require('../firebase/firebaseAdmin');
+const { db, admin } = require('../firebase/firebaseAdmin');
 const {
   getBooking,
   updateBooking,
@@ -13,6 +13,28 @@ const {
 const { resolveConflictWithAI } = require('../ai/conflict');
 
 const router = express.Router();
+
+/**
+ * Extend end time, add extension cost to running total, and if the booking is no longer
+ * past end time, return to active and clear tow flag so grace/UI can reset.
+ */
+async function applyExtensionToBooking(bookingId, newEndIso, extensionCost) {
+  const booking = await getBooking(bookingId);
+  if (!booking) return null;
+  const add = Number(extensionCost || 0);
+  const newTotal = Math.round((Number(booking.totalAmount || 0) + add) * 100) / 100;
+  const newEndMs = new Date(newEndIso).getTime();
+  const patch = {
+    endTime: newEndIso,
+    totalAmount: newTotal
+  };
+  if (Number.isFinite(newEndMs) && newEndMs > Date.now()) {
+    patch.status = 'active';
+    patch.towAlertSentAt = admin.firestore.FieldValue.delete();
+  }
+  await updateBooking(bookingId, patch);
+  return getBooking(bookingId);
+}
 
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -52,9 +74,16 @@ router.post('/request', async (req, res) => {
       });
 
     if (!conflictBooking) {
-      await updateBooking(bookingId, { endTime: newEndIso });
-      const extensionCost = hours * Number(booking.baseRate || 0) * Number(booking.aiSurgeMultiplier || 1);
-      return res.json({ approved: true, newEndTime: newEndIso, extensionCost });
+      const extensionCost =
+        Math.round(hours * Number(booking.baseRate || 0) * Number(booking.aiSurgeMultiplier || 1) * 100) / 100;
+      const updated = await applyExtensionToBooking(bookingId, newEndIso, extensionCost);
+      return res.json({
+        approved: true,
+        newEndTime: newEndIso,
+        extensionCost,
+        totalAmount: updated?.totalAmount,
+        status: updated?.status
+      });
     }
 
     const spot = await getSpot(booking.spotId);
@@ -131,7 +160,11 @@ router.post('/resolve', async (req, res) => {
     await updateConflictRequest(conflictId, { status: outcome, resolvedAt: new Date().toISOString() });
 
     if (outcome === 'accepted') {
-      await updateBooking(conflict.currentBookingId, { endTime: conflict.proposedNewEndTime });
+      const booking = await getBooking(conflict.currentBookingId);
+      const hours = Number(conflict.extensionHours || 0);
+      const extensionCost =
+        Math.round(hours * Number(booking?.baseRate || 0) * Number(booking?.aiSurgeMultiplier || 1) * 100) / 100;
+      await applyExtensionToBooking(conflict.currentBookingId, conflict.proposedNewEndTime, extensionCost);
       await createNotification(
         conflict.currentDriverId,
         'extension_approved',

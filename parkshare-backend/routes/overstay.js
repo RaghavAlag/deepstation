@@ -1,6 +1,9 @@
 const { db } = require('../firebase/firebaseAdmin');
 const { updateBooking, createNotification } = require('../firebase/schema');
 
+/** Grace after scheduled end before tow alert (must match driver UI 5-minute grace). */
+const GRACE_MS = 5 * 60 * 1000;
+
 async function checkOverstays() {
   const nowMs = Date.now();
   const snapshot = await db
@@ -33,7 +36,7 @@ async function checkOverstays() {
       );
     }
 
-    if (nowMs - endMs > 10 * 60 * 1000 && !booking.towAlertSentAt) {
+    if (nowMs - endMs > GRACE_MS && !booking.towAlertSentAt) {
       await updateBooking(booking.bookingId, { towAlertSentAt: new Date().toISOString() });
       await createNotification(
         booking.driverId,
@@ -44,7 +47,7 @@ async function checkOverstays() {
       await createNotification(
         booking.ownerId,
         'tow_alert',
-        `🚨 Tow Alert — Vehicle at ${booking.spotTitle} flagged for removal.`,
+        `Tow required: ${booking.driverName || 'A driver'}'s vehicle at "${booking.spotTitle}" — grace period ended. Arrange towing / removal.`,
         { bookingId: booking.bookingId }
       );
     }
