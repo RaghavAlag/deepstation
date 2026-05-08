@@ -45,7 +45,8 @@ router.post('/request', async (req, res) => {
     const conflictBooking = snapshot.docs
       .map((doc) => doc.data())
       .find((item) => {
-        if (item.bookingId === bookingId || item.status === 'cancelled') return false;
+        if (item.bookingId === bookingId) return false;
+        if (item.status === 'cancelled' || item.status === 'completed') return false;
         const itemStart = new Date(item.startTime).getTime();
         return itemStart >= existingEndMs && itemStart <= newEndMs;
       });

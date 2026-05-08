@@ -141,10 +141,10 @@
       spots: [],
       selectedSpot: null,
       selectedHours: 1,
+      selectedStartTime: null,
       selectedRate: 0,
       currentBooking: null,
       spotMarkerStatus: {},
-      overstayDetectedAt: null,
       entryVideoURL: null,
       exitVideoURL: null,
       lastBookingId: null,
@@ -731,13 +731,23 @@
       const spot = state.selectedSpot;
       const pricePerHour = Number(state.selectedRate || spot.baseHourlyRate || 0);
       const total = pricePerHour * state.selectedHours;
+      const defaultStart = new Date(Date.now() + 5 * 60 * 1000);
+      defaultStart.setSeconds(0, 0);
+      const localDefault = new Date(defaultStart.getTime() - defaultStart.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
       document.getElementById('bookingSummary').innerHTML = `
         <div><strong>${spot.title}</strong></div>
         <div>${spot.address}</div>
+        <label class="label" for="bookingStartAt" style="display:block;margin-top:8px;">Start At</label>
+        <input id="bookingStartAt" type="datetime-local" style="width:100%;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
         <div>Duration: ${state.selectedHours}h</div>
         <div>Rate: ₹${pricePerHour}/hr</div>
         <div>Total: ₹${total}</div>
       `;
+      const startInput = document.getElementById('bookingStartAt');
+      startInput.value = state.selectedStartTime || localDefault;
+      startInput.min = localDefault;
       document.getElementById('bookingError').textContent = '';
       document.getElementById('bookingModalWrap').classList.add('show');
     }
@@ -749,7 +759,17 @@
       btn.textContent = 'Processing...';
       try {
         const spot = state.selectedSpot;
-        const start = new Date();
+        const startInput = document.getElementById('bookingStartAt');
+        const start = new Date(startInput?.value || '');
+        if (!startInput?.value || !Number.isFinite(start.getTime())) {
+          document.getElementById('bookingError').textContent = 'Please choose a valid start date and time.';
+          return;
+        }
+        if (start.getTime() < Date.now()) {
+          document.getElementById('bookingError').textContent = 'Start time must be in the future.';
+          return;
+        }
+        state.selectedStartTime = startInput.value;
         const end = new Date(start.getTime() + state.selectedHours * 60 * 60 * 1000);
         const body = {
           spotId: spot.spotId,
@@ -904,19 +924,12 @@
       const b = state.currentBooking;
       const status = getStatusMeta(b);
       const isOverstaying = b.status === 'overstaying';
-      if (isOverstaying && !state.overstayDetectedAt) {
-        state.overstayDetectedAt = Date.now();
-      }
-      if (!isOverstaying) {
-        state.overstayDetectedAt = null;
-      }
       const remainingSec = Math.max(0, Math.floor((new Date(b.endTime).getTime() - Date.now()) / 1000));
       const h = Math.floor(remainingSec / 3600);
       const m = Math.floor((remainingSec % 3600) / 60);
       const s = remainingSec % 60;
-      const graceRemaining = state.overstayDetectedAt
-        ? Math.max(0, 300 - Math.floor((Date.now() - state.overstayDetectedAt) / 1000))
-        : 300;
+      const overdueSeconds = Math.max(0, Math.floor((Date.now() - new Date(b.endTime).getTime()) / 1000));
+      const graceRemaining = isOverstaying ? Math.max(0, 300 - overdueSeconds) : 300;
       const penalty = Math.round(Number(b.baseRate || 0) * 1.5);
       bar.style.background = isOverstaying ? '#3b0000' : 'var(--surface)';
       bar.innerHTML = `
@@ -971,7 +984,6 @@
         document.getElementById('activeBookingBar').classList.remove('show');
         document.getElementById('towBanner').classList.remove('show');
         state.currentBooking = null;
-        state.overstayDetectedAt = null;
         return;
       }
       showActiveBookingBar();

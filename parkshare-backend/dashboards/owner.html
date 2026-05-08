@@ -345,6 +345,12 @@
       const r = b.damageReport || {};
       const areas = Array.isArray(r.suspectedDamageAreas) ? r.suspectedDamageAreas : [];
       const conf = Number(r.confidenceScore || 0);
+      const entryVideo = b.entryVideoURL
+        ? `<a href="${b.entryVideoURL}" target="_blank" rel="noopener">Open entry video</a>`
+        : '<span class="muted">Entry video not uploaded.</span>';
+      const exitVideo = b.exitVideoURL
+        ? `<a href="${b.exitVideoURL}" target="_blank" rel="noopener">Open exit video</a>`
+        : '<span class="muted">Exit video not uploaded.</span>';
       return `
         <div class="damage-section">
           <div class="chips">${areas.map((a) => `<span class="chip">${a}</span>`).join('')}</div>
@@ -352,6 +358,8 @@
           <div class="progress" style="margin:8px 0;"><span style="width:${conf}%;"></span></div>
           <div>Estimated repair: ₹${r.estimatedRepairCost || 0}</div>
           <div><span class="badge">${r.recommendation || 'Investigate'}</span></div>
+          <div style="margin-top:8px;">📹 ${entryVideo}</div>
+          <div>📹 ${exitVideo}</div>
           <p class="muted">${r.aiRemarks || 'No remarks available.'}</p>
           <button class="btn-primary claim-btn" data-id="${b.bookingId}" data-decision="accepted">Accept Claim</button>
           <button class="btn-danger claim-btn" data-id="${b.bookingId}" data-decision="rejected">Reject Claim</button>
