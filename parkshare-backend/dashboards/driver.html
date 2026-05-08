@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Dashboard | ParkShare</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./assets/dashboard.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    #map { height: calc(100vh - 64px); }
+    .nav-brand { font-family: var(--font-head); color: var(--accent); font-size: 1.6rem; }
+    .profile { display: flex; align-items: center; gap: 10px; }
+    .profile img { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); }
+    .floating-search { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 800; width: min(640px, calc(100vw - 24px)); }
+    .search-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+    .search-box input { width: 100%; background: transparent; border: 0; color: var(--text); outline: none; }
+    .suggestions { margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .suggestion { padding: 10px; cursor: pointer; border-top: 1px solid var(--border); }
+    .suggestion:first-child { border-top: 0; }
+    .suggestion:hover { background: rgba(255,255,255,.04); }
+    .bottom-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 850; background: var(--surface); border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; padding: 16px; transform: translateY(110%); transition: transform .25s ease; max-height: 70vh; overflow: auto; }
+    .bottom-sheet.open { transform: translateY(0); }
+    .sheet-photos { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 8px; }
+    .sheet-photos img { width: 160px; height: 110px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px; font-size: .78rem; }
+    .duration { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+    .duration button { min-width: 58px; }
+    .active-booking { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 860; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px; display: none; }
+    .active-booking.show { display: block; }
+    .status-chip { border-radius: 999px; padding: 3px 9px; font-size: .75rem; border: 1px solid transparent; }
+    .status-green { background: rgba(0,255,136,.15); border-color: var(--success); }
+    .status-amber { background: rgba(255,170,0,.16); border-color: var(--warning); }
+    .status-red { background: rgba(255,68,68,.16); border-color: var(--danger); }
+    .marker-wrap { text-align: center; transform: translate(-50%, -100%); }
+    .marker-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; margin: 0 auto 3px; box-shadow: 0 0 10px rgba(0,0,0,.3); }
+    .price-pill { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 7px; font-size: .72rem; white-space: nowrap; }
+    .overlay { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.56); display: none; align-items: center; justify-content: center; padding: 20px; }
+    .overlay.show { display: flex; }
+    .modal { width: min(520px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .history-panel { position: fixed; left: 0; right: 0; bottom: 0; z-index: 880; background: var(--surface); border-top: 1px solid var(--border); border-radius: 16px 16px 0 0; max-height: 72vh; overflow: auto; padding: 14px; transform: translateY(110%); transition: transform .25s ease; }
+    .history-panel.open { transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <header class="navbar">
+    <div class="nav-brand">ParkShare</div>
+    <div class="profile">
+      <button id="historyBtn" class="btn-secondary">History</button>
+      <button class="btn-secondary" title="Notifications">🔔 <span class="badge" style="background:#ff4444;">0</span></button>
+      <span id="driverName"></span>
+      <img id="driverPhoto" alt="Driver photo" />
+      <button id="signOutBtn" class="btn-danger">Sign Out</button>
+    </div>
+  </header>
+
+  <div id="map"></div>
+  <div class="floating-search">
+    <div class="search-box"><span>🔍</span><input id="searchInput" placeholder="Search location..." /></div>
+    <div id="suggestions" class="suggestions" style="display:none;"></div>
+  </div>
+
+  <section id="sheet" class="bottom-sheet"></section>
+  <section id="activeBookingBar" class="active-booking"></section>
+  <section id="historyPanel" class="history-panel"></section>
+
+  <div id="bookingModalWrap" class="overlay">
+    <div class="modal">
+      <h3 style="margin-bottom:10px;">Confirm Booking</h3>
+      <div id="bookingSummary" class="muted" style="margin-bottom:10px;"></div>
+      <button id="confirmBookBtn" class="btn-primary" style="width:100%;">Confirm & Pay (Demo)</button>
+      <p id="bookingError" style="color:var(--danger);margin-top:8px;"></p>
+      <button id="closeModalBtn" class="btn-secondary" style="margin-top:8px;width:100%;">Cancel</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const uid = sessionStorage.getItem('uid');
+    const role = sessionStorage.getItem('role');
+    if (!uid || role !== 'driver') window.location.replace('./login.html');
+
+    const apiBase = 'http://localhost:3001/api';
+    const state = {
+      map: null,
+      userPos: { lat: 18.9667, lng: 72.8333 },
+      markers: [],
+      spots: [],
+      selectedSpot: null,
+      selectedHours: 1,
+      currentBooking: null
+    };
+
+    document.getElementById('driverName').textContent = sessionStorage.getItem('name') || 'Driver';
+    document.getElementById('driverPhoto').src = sessionStorage.getItem('photoURL') || 'https://via.placeholder.com/40';
+    document.getElementById('signOutBtn').onclick = () => { sessionStorage.clear(); window.location.href = './login.html'; };
+
+    const haversineDistance = (lat1, lng1, lat2, lng2) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    };
+
+    const json = async (url, options = {}) => {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error((await res.text()) || 'Request failed');
+      return res.json();
+    };
+
+    function initMap() {
+      state.map = L.map('map').setView([state.userPos.lat, state.userPos.lng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(state.map);
+      L.circleMarker([state.userPos.lat, state.userPos.lng], { radius: 7, color: '#00d4ff' }).addTo(state.map);
+    }
+
+    async function getSpotAvailabilityColor(spotId) {
+      const now = Date.now();
+      const data = await json(`${apiBase}/bookings?spotId=${spotId}`).catch(() => ({ bookings: [] }));
+      const active = (data.bookings || []).find((b) => {
+        const s = new Date(b.startTime).getTime();
+        const e = new Date(b.endTime).getTime();
+        return s <= now && now <= e && b.status !== 'completed' && b.status !== 'cancelled';
+      });
+      if (!active) return '#00d4ff';
+      const endMs = new Date(active.endTime).getTime();
+      if (endMs - now <= 30 * 60 * 1000) return '#ffaa00';
+      return '#ff4444';
+    }
+
+    function markerIcon(color, rate) {
+      return L.divIcon({
+        className: '',
+        html: `<div class="marker-wrap"><div class="marker-dot" style="background:${color};"></div><div class="price-pill">₹${rate}/hr</div></div>`,
+        iconSize: [70, 42],
+        iconAnchor: [35, 42]
+      });
+    }
+
+    async function renderMarkers(spots) {
+      state.markers.forEach((m) => state.map.removeLayer(m));
+      state.markers = [];
+      for (const spot of spots) {
+        const color = await getSpotAvailabilityColor(spot.spotId);
+        const marker = L.marker([Number(spot.latitude), Number(spot.longitude)], { icon: markerIcon(color, spot.baseHourlyRate || 0) }).addTo(state.map);
+        marker.on('click', () => openSpotSheet(spot));
+        state.markers.push(marker);
+      }
+    }
+
+    function openSpotSheet(spot) {
+      state.selectedSpot = spot;
+      state.selectedHours = 1;
+      const distance = haversineDistance(state.userPos.lat, state.userPos.lng, Number(spot.latitude), Number(spot.longitude)).toFixed(1);
+      const images = (spot.images || []).length ? spot.images : ['https://via.placeholder.com/320x180?text=No+Image'];
+      const features = [
+        spot.isCovered ? '<span class="chip">Covered</span>' : '',
+        spot.hasEVCharging ? '<span class="chip">EV Charging</span>' : '',
+        spot.hasCCTV ? '<span class="chip">CCTV</span>' : ''
+      ].join('');
+      const vehicleTags = (spot.vehicleTypes || []).map((v) => `<span class="chip">${v}</span>`).join('');
+      const sheet = document.getElementById('sheet');
+      sheet.innerHTML = `
+        <div class="sheet-photos">${images.map((img) => `<img src="${img}" alt="spot image" />`).join('')}</div>
+        <h2 style="font-family:var(--font-head);">${spot.title || 'Parking Spot'}</h2>
+        <p class="muted">${spot.address || ''}</p>
+        <div class="chips">${features}</div>
+        <div class="chips">${vehicleTags}</div>
+        <p>Distance: ${distance} km</p>
+        <p>Available: ${spot.availableFrom || '--:--'} to ${spot.availableTo || '--:--'}</p>
+        <div id="ai-price-section" class="card" style="margin:8px 0;">AI pricing coming in Phase 6. Base rate: ₹${spot.baseHourlyRate || 0}/hr</div>
+        <div class="duration">
+          <button class="btn-secondary dur" data-h="1">1h</button>
+          <button class="btn-secondary dur" data-h="2">2h</button>
+          <button class="btn-secondary dur" data-h="3">3h</button>
+          <button class="btn-secondary" id="customBtn">Custom</button>
+          <input id="customHours" type="number" min="1" value="1" style="display:none;width:90px;background:#111;color:#fff;border:1px solid var(--border);border-radius:10px;padding:8px;" />
+        </div>
+        <p id="totalPrice">Total: ₹${(spot.baseHourlyRate || 0) * state.selectedHours}</p>
+        <button id="bookNowBtn" class="btn-primary" style="width:100%;">Book Now</button>
+        <button id="closeSheetBtn" class="btn-secondary" style="width:100%;margin-top:8px;">Close</button>
+      `;
+      sheet.classList.add('open');
+      sheet.querySelectorAll('.dur').forEach((btn) => btn.onclick = () => {
+        state.selectedHours = Number(btn.dataset.h);
+        updateTotal();
+      });
+      sheet.querySelector('#customBtn').onclick = () => {
+        const input = sheet.querySelector('#customHours');
+        input.style.display = input.style.display === 'none' ? 'block' : 'none';
+      };
+      sheet.querySelector('#customHours').oninput = (e) => {
+        state.selectedHours = Math.max(1, Number(e.target.value || 1));
+        updateTotal();
+      };
+      sheet.querySelector('#bookNowBtn').onclick = openBookingModal;
+      sheet.querySelector('#closeSheetBtn').onclick = closeSheet;
+    }
+
+    function updateTotal() {
+      const total = (state.selectedSpot.baseHourlyRate || 0) * state.selectedHours;
+      document.getElementById('totalPrice').textContent = `Total: ₹${total}`;
+    }
+
+    function closeSheet() { document.getElementById('sheet').classList.remove('open'); }
+
+    function openBookingModal() {
+      const spot = state.selectedSpot;
+      const total = (spot.baseHourlyRate || 0) * state.selectedHours;
+      document.getElementById('bookingSummary').innerHTML = `
+        <div><strong>${spot.title}</strong></div>
+        <div>${spot.address}</div>
+        <div>Duration: ${state.selectedHours}h</div>
+        <div>Rate: ₹${spot.baseHourlyRate}/hr</div>
+        <div>Total: ₹${total}</div>
+      `;
+      document.getElementById('bookingError').textContent = '';
+      document.getElementById('bookingModalWrap').classList.add('show');
+    }
+
+    document.getElementById('closeModalBtn').onclick = () => document.getElementById('bookingModalWrap').classList.remove('show');
+    document.getElementById('confirmBookBtn').onclick = async () => {
+      const btn = document.getElementById('confirmBookBtn');
+      btn.disabled = true;
+      btn.textContent = 'Processing...';
+      try {
+        const spot = state.selectedSpot;
+        const start = new Date();
+        const end = new Date(start.getTime() + state.selectedHours * 60 * 60 * 1000);
+        const body = {
+          spotId: spot.spotId,
+          spotTitle: spot.title,
+          spotAddress: spot.address,
+          driverId: uid,
+          driverName: sessionStorage.getItem('name') || 'Driver',
+          ownerId: spot.ownerId,
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          durationHours: state.selectedHours,
+          baseRate: spot.baseHourlyRate || 0,
+          aiSurgeMultiplier: 1.0,
+          totalAmount: (spot.baseHourlyRate || 0) * state.selectedHours,
+          paymentStatus: 'mock_paid'
+        };
+        const data = await json(`${apiBase}/bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        state.currentBooking = data.booking;
+        document.getElementById('bookingModalWrap').classList.remove('show');
+        closeSheet();
+        showActiveBookingBar();
+      } catch (error) {
+        document.getElementById('bookingError').textContent = 'Booking failed. Please retry.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Confirm & Pay (Demo)';
+      }
+    };
+
+    function getStatusMeta(booking) {
+      const remaining = new Date(booking.endTime).getTime() - Date.now();
+      if (remaining <= 0) return { text: 'Overstaying', cls: 'status-red' };
+      if (remaining < 15 * 60 * 1000) return { text: 'Ending Soon', cls: 'status-amber' };
+      return { text: 'Active', cls: 'status-green' };
+    }
+
+    function openExtensionModal() {
+      alert('Extension flow will be wired in Phase 7.');
+    }
+
+    function showActiveBookingBar() {
+      const bar = document.getElementById('activeBookingBar');
+      if (!state.currentBooking) return;
+      const b = state.currentBooking;
+      const status = getStatusMeta(b);
+      const remainingSec = Math.max(0, Math.floor((new Date(b.endTime).getTime() - Date.now()) / 1000));
+      const h = Math.floor(remainingSec / 3600);
+      const m = Math.floor((remainingSec % 3600) / 60);
+      const s = remainingSec % 60;
+      bar.innerHTML = `
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+          <div>
+            <strong>${b.spotTitle || 'Spot'}</strong> • ${b.spotAddress || ''}
+            <div class="muted">Time left: ${h}h ${m}m ${s}s</div>
+          </div>
+          <span class="status-chip ${status.cls}">${status.text}</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button id="extendBtn" class="btn-secondary">Extend ⏱</button>
+          <button id="navigateBtn" class="btn-secondary">Navigate 🗺</button>
+          <button id="endBtn" class="btn-danger">End Booking ✋</button>
+        </div>
+      `;
+      bar.classList.add('show');
+      document.getElementById('extendBtn').onclick = openExtensionModal;
+      document.getElementById('navigateBtn').onclick = () => window.open(`https://www.google.com/maps/dir/?api=1&destination=${b.latitude || state.selectedSpot.latitude},${b.longitude || state.selectedSpot.longitude}`, '_blank');
+      document.getElementById('endBtn').onclick = async () => {
+        await json(`${apiBase}/bookings/${b.bookingId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'completed' }) });
+        bar.classList.remove('show');
+        state.currentBooking = null;
+      };
+    }
+
+    setInterval(async () => {
+      if (!state.currentBooking) return;
+      const result = await json(`${apiBase}/bookings/${state.currentBooking.bookingId}`).catch(() => null);
+      if (!result || !result.booking) return;
+      state.currentBooking = result.booking;
+      if (state.currentBooking.status === 'completed' || state.currentBooking.status === 'cancelled') {
+        document.getElementById('activeBookingBar').classList.remove('show');
+        state.currentBooking = null;
+        return;
+      }
+      showActiveBookingBar();
+    }, 30000);
+
+    setInterval(() => {
+      if (state.currentBooking) showActiveBookingBar();
+    }, 1000);
+
+    function statusChipClass(status) {
+      if (status === 'active') return 'status-green';
+      if (status === 'upcoming') return 'status-amber';
+      if (status === 'cancelled') return 'status-red';
+      if (status === 'overstaying') return 'status-amber';
+      return '';
+    }
+
+    document.getElementById('historyBtn').onclick = async () => {
+      const panel = document.getElementById('historyPanel');
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        return;
+      }
+      const data = await json(`${apiBase}/bookings?driverId=${uid}`).catch(() => ({ bookings: [] }));
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3>Booking History</h3>
+          <button id="closeHistory" class="btn-secondary">Close</button>
+        </div>
+        ${(data.bookings || []).map((b) => `
+          <article class="card" style="margin-top:8px;">
+            <div><strong>${b.spotTitle || 'Spot'}</strong></div>
+            <div class="muted">${new Date(b.startTime).toLocaleString()} • ${b.durationHours || 0}h</div>
+            <div>₹${b.totalAmount || 0} <span class="status-chip ${statusChipClass(b.status)}">${b.status || ''}</span></div>
+          </article>
+        `).join('') || '<p class="muted">No booking history yet.</p>'}
+      `;
+      panel.classList.add('open');
+      document.getElementById('closeHistory').onclick = () => panel.classList.remove('open');
+    };
+
+    const suggestions = document.getElementById('suggestions');
+    let searchTimer = null;
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      const q = e.target.value.trim();
+      if (!q) {
+        suggestions.style.display = 'none';
+        return;
+      }
+      searchTimer = setTimeout(async () => {
+        const list = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=5`).then((r) => r.json()).catch(() => []);
+        if (!list.length) {
+          suggestions.style.display = 'none';
+          return;
+        }
+        suggestions.innerHTML = list.map((item) => `<div class="suggestion" data-lat="${item.lat}" data-lng="${item.lon}">${item.display_name}</div>`).join('');
+        suggestions.style.display = 'block';
+        suggestions.querySelectorAll('.suggestion').forEach((entry) => entry.onclick = async () => {
+          const lat = Number(entry.dataset.lat);
+          const lng = Number(entry.dataset.lng);
+          state.userPos = { lat, lng };
+          state.map.flyTo([lat, lng], 15);
+          suggestions.style.display = 'none';
+          await loadNearbySpots();
+        });
+      }, 400);
+    });
+
+    async function loadNearbySpots() {
+      const data = await json(`${apiBase}/spots/nearby?lat=${state.userPos.lat}&lng=${state.userPos.lng}&radius=10`).catch(() => ({ spots: [] }));
+      state.spots = data.spots || [];
+      await renderMarkers(state.spots);
+    }
+
+    function initLocationAndData() {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        state.map.setView([state.userPos.lat, state.userPos.lng], 13);
+        await loadNearbySpots();
+      }, async () => {
+        state.map.setView([18.9667, 72.8333], 13);
+        await loadNearbySpots();
+      });
+    }
+
+    initMap();
+    initLocationAndData();
+    setInterval(loadNearbySpots, 60000);
+  </script>
+</body>
+</html>

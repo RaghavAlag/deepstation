@@ -72,24 +72,11 @@
   <div class="toast-wrap" id="toastWrap"></div>
 
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js';
-    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js';
-
     const uid = sessionStorage.getItem('uid');
     const role = sessionStorage.getItem('role');
     if (!uid || role !== 'owner') {
       window.location.replace('./login.html');
     }
-
-    const firebaseConfig = {
-      apiKey: 'PASTE_YOUR_FIREBASE_API_KEY_HERE',
-      authDomain: 'PASTE_YOUR_FIREBASE_AUTH_DOMAIN_HERE',
-      projectId: 'PASTE_YOUR_FIREBASE_PROJECT_ID_HERE',
-      storageBucket: 'PASTE_YOUR_FIREBASE_STORAGE_BUCKET_HERE',
-      messagingSenderId: 'PASTE_YOUR_FIREBASE_MESSAGING_SENDER_ID_HERE',
-      appId: 'PASTE_YOUR_FIREBASE_APP_ID_HERE'
-    };
-    const storage = getStorage(initializeApp(firebaseConfig));
 
     const apiBase = 'http://localhost:3001/api';
     const ownerName = sessionStorage.getItem('name') || 'Owner';
@@ -114,7 +101,16 @@
 
     async function fetchJSON(url, options = {}) {
       const res = await fetch(url, options);
-      if (!res.ok) throw new Error('Request failed');
+      if (!res.ok) {
+        let detail = 'Request failed';
+        try {
+          const data = await res.json();
+          detail = data.error || JSON.stringify(data);
+        } catch {
+          detail = await res.text();
+        }
+        throw new Error(detail || 'Request failed');
+      }
       return res.json();
     }
 
@@ -259,26 +255,39 @@
 
     async function uploadImages(files, spotId) {
       const bar = document.getElementById('uploadProgress');
-      const urls = [];
-      for (const file of files.slice(0, 5)) {
+      bar.innerHTML = '';
+      const limitedFiles = files.slice(0, 5);
+      limitedFiles.forEach((file) => {
         const row = document.createElement('div');
         row.className = 'progress-item';
-        row.innerHTML = `<div class="muted">${file.name}</div><div class="progress"><span style="width:0%"></span></div>`;
+        row.innerHTML = `<div class="muted">${file.name}</div><div class="progress"><span style="width:20%"></span></div>`;
         bar.appendChild(row);
-        const fill = row.querySelector('span');
-        const fileRef = ref(storage, `spots/${spotId}/images/${Date.now()}-${file.name}`);
-        const task = uploadBytesResumable(fileRef, file);
-        await new Promise((resolve, reject) => {
-          task.on('state_changed', (snap) => {
-            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
-            fill.style.width = `${pct}%`;
-          }, reject, async () => {
-            urls.push(await getDownloadURL(task.snapshot.ref));
-            resolve();
-          });
-        });
+      });
+      const formData = new FormData();
+      formData.append('spotId', spotId);
+      limitedFiles.forEach((file) => formData.append('images', file));
+
+      const response = await fetch(`${apiBase}/spots/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        let detail = 'Local image upload failed';
+        try {
+          const data = await response.json();
+          detail = data.error || detail;
+        } catch {
+          // ignore parsing errors
+        }
+        throw new Error(detail);
       }
-      return urls;
+
+      const payload = await response.json();
+      bar.querySelectorAll('.progress span').forEach((el) => {
+        el.style.width = '100%';
+      });
+      return payload.imageUrls || [];
     }
 
     function renderSpots(list) {
@@ -340,29 +349,33 @@
       const form = document.getElementById('spotForm');
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const fd = new FormData(form);
-        const files = Array.from(document.getElementById('spotImages').files || []);
-        const localSpotId = state.editingSpotId || crypto.randomUUID();
-        const uploaded = files.length ? await uploadImages(files, localSpotId) : [];
-        const payload = {
-          ownerId: uid,
-          ownerName,
-          title: fd.get('title'),
-          address: fd.get('address'),
-          description: fd.get('description'),
-          latitude: Number(fd.get('latitude')),
-          longitude: Number(fd.get('longitude')),
-          vehicleTypes: fd.getAll('vehicleTypes'),
-          isCovered: form.elements.isCovered.checked,
-          hasEVCharging: form.elements.hasEVCharging.checked,
-          hasCCTV: form.elements.hasCCTV.checked,
-          baseHourlyRate: Number(fd.get('baseHourlyRate')),
-          baseDailyRate: Number(fd.get('baseDailyRate')),
-          availableFrom: fd.get('availableFrom'),
-          availableTo: fd.get('availableTo'),
-          images: uploaded
-        };
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.disabled = true;
+        submitBtn.textContent = state.editingSpotId ? 'Saving...' : 'Listing...';
         try {
+          const fd = new FormData(form);
+          const files = Array.from(document.getElementById('spotImages').files || []);
+          const localSpotId = state.editingSpotId || crypto.randomUUID();
+          const uploaded = files.length ? await uploadImages(files, localSpotId) : [];
+          const payload = {
+            ownerId: uid,
+            ownerName,
+            title: fd.get('title'),
+            address: fd.get('address'),
+            description: fd.get('description'),
+            latitude: Number(fd.get('latitude')),
+            longitude: Number(fd.get('longitude')),
+            vehicleTypes: fd.getAll('vehicleTypes'),
+            isCovered: form.elements.isCovered.checked,
+            hasEVCharging: form.elements.hasEVCharging.checked,
+            hasCCTV: form.elements.hasCCTV.checked,
+            baseHourlyRate: Number(fd.get('baseHourlyRate')),
+            baseDailyRate: Number(fd.get('baseDailyRate')),
+            availableFrom: fd.get('availableFrom'),
+            availableTo: fd.get('availableTo'),
+            images: uploaded,
+            isActive: true
+          };
           if (state.editingSpotId) {
             await fetchJSON(`${apiBase}/spots/${state.editingSpotId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             showToast('Spot updated successfully! ✅');
@@ -373,9 +386,14 @@
           form.reset();
           document.getElementById('uploadProgress').innerHTML = '';
           state.editingSpotId = null;
-          loadSpots();
-        } catch {
-          showToast('Could not save spot.');
+          await loadSpots();
+          setTab('spots');
+        } catch (error) {
+          const code = error?.code ? ` (${error.code})` : '';
+          showToast(`Could not save spot${code}. ${error?.message || ''}`.trim());
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = state.editingSpotId ? 'Save Changes' : 'List Spot';
         }
       });
     }

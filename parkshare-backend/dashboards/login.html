@@ -127,12 +127,12 @@
     import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js';
 
     const firebaseConfig = {
-      apiKey: 'PASTE_YOUR_FIREBASE_API_KEY_HERE', // Phase 1 Guide B step 12: apiKey
-      authDomain: 'PASTE_YOUR_FIREBASE_AUTH_DOMAIN_HERE', // Phase 1 Guide B step 12: authDomain
-      projectId: 'PASTE_YOUR_FIREBASE_PROJECT_ID_HERE', // Phase 1 Guide B step 12: projectId
-      storageBucket: 'PASTE_YOUR_FIREBASE_STORAGE_BUCKET_HERE', // Phase 1 Guide B step 12: storageBucket
-      messagingSenderId: 'PASTE_YOUR_FIREBASE_MESSAGING_SENDER_ID_HERE', // Phase 1 Guide B step 12: messagingSenderId
-      appId: 'PASTE_YOUR_FIREBASE_APP_ID_HERE' // Phase 1 Guide B step 12: appId
+      apiKey: "AIzaSyCz-vuMJ30m_Zuk_Rcyxp6Q3DF0olJfkAo", // Phase 1 Guide B step 12: apiKey
+      authDomain: "deepstation-b4c26.firebaseapp.com", // Phase 1 Guide B step 12: authDomain
+      projectId: "deepstation-b4c26", // Phase 1 Guide B step 12: projectId
+      storageBucket: "deepstation-b4c26.appspot.com", // Phase 1 Guide B step 12: storageBucket
+      messagingSenderId: "997619029787", // Phase 1 Guide B step 12: messagingSenderId
+      appId: "1:997619029787:web:6e6ce7235be6179b5125be" // Phase 1 Guide B step 12: appId
     };
 
     const app = initializeApp(firebaseConfig);
@@ -143,6 +143,10 @@
     const errorMessage = document.getElementById('errorMessage');
     const apiBase = 'http://localhost:3001/api';
     const defaultButtonText = 'Continue with Google';
+
+    function hasPlaceholderConfig() {
+      return Object.values(firebaseConfig).some((value) => String(value).startsWith('PASTE_YOUR_FIREBASE_'));
+    }
 
     function setLoadingState(isLoading) {
       if (isLoading) {
@@ -156,6 +160,10 @@
 
     button.addEventListener('click', async () => {
       errorMessage.textContent = '';
+      if (hasPlaceholderConfig()) {
+        errorMessage.textContent = 'Firebase web config is missing. Paste apiKey/authDomain/projectId/storageBucket/messagingSenderId/appId in login.html first.';
+        return;
+      }
       setLoadingState(true);
 
       try {
@@ -189,7 +197,8 @@
           window.location.href = './owner.html';
         }
       } catch (error) {
-        errorMessage.textContent = 'Sign-in failed. Please try again and make sure popup blocking is off.';
+        const code = error?.code ? ` (${error.code})` : '';
+        errorMessage.textContent = `Sign-in failed${code}. Please try again and make sure you are opening this page via http://127.0.0.1:5500 (Live Server).`;
         setLoadingState(false);
       }
     });
